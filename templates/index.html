@@ -1,150 +1,169 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Pelée AI – Internal Address Tool</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <title>Pelée AI – Data Tool</title>
 
-    <!-- Space Grotesk for brand feel -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    >
+    <!-- Space Grotesk -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
 
     <style>
-        :root {
-            color-scheme: dark;
-        }
-        * {
-            box-sizing: border-box;
-        }
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+
         body {
             margin: 0;
             min-height: 100vh;
-            font-family: "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-family: "Space Grotesk", system-ui, sans-serif;
             background:
                 radial-gradient(circle at top left, #1e293b 0, transparent 55%),
                 radial-gradient(circle at top right, #0f172a 0, #020617 60%);
             color: #e5e7eb;
         }
+
         .page {
-            max-width: 1100px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 32px 20px 40px;
         }
+
+        /* Header */
         header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
             margin-bottom: 26px;
         }
+
         .brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
+
         .brand-logo {
-            width: 34px;
-            height: 34px;
+            width: 40px;
+            height: 40px;
             border-radius: 999px;
             background: radial-gradient(circle at 30% 30%, #facc15, #f97316);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 18px;
+            font-size: 20px;
             color: #020617;
-            box-shadow:
-                0 0 16px rgba(250, 204, 21, 0.65),
-                0 16px 35px rgba(0,0,0,0.75);
-            animation: logoGlow 2.7s ease-in-out infinite alternate;
+            box-shadow: 0 0 18px #facc15aa;
+            animation: pulseGlow 3s ease-in-out infinite;
         }
-        @keyframes logoGlow {
-            0% {
-                box-shadow:
-                    0 0 10px rgba(250, 204, 21, 0.45),
-                    0 14px 30px rgba(0,0,0,0.75);
-                transform: translateY(0);
-            }
-            100% {
-                box-shadow:
-                    0 0 22px rgba(250, 204, 21, 0.9),
-                    0 20px 40px rgba(0,0,0,0.9);
-                transform: translateY(-1px);
-            }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 18px #facc15aa; }
+            50% { box-shadow: 0 0 32px #facc1588; }
+            100% { box-shadow: 0 0 18px #facc15aa; }
         }
-        .brand-text {
-            display: flex;
-            flex-direction: column;
-        }
+
         .brand-name {
             font-weight: 600;
             letter-spacing: 0.16em;
             text-transform: uppercase;
-            font-size: 12px;
-        }
-        .brand-tagline {
             font-size: 13px;
+        }
+
+        .brand-tagline {
+            font-size: 12px;
             color: #9ca3af;
         }
+
+        /* HERO GRID */
         .hero {
             display: grid;
-            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.1fr);
-            gap: 24px;
+            grid-template-columns: 1.15fr 1fr;
+            gap: 30px;
         }
         @media (max-width: 900px) {
             .hero {
-                grid-template-columns: minmax(0, 1fr);
+                grid-template-columns: 1fr;
             }
         }
+
+        /* HERO TEXT */
         .hero-copy h1 {
-            font-size: 32px;
+            font-size: 36px;
             line-height: 1.1;
-            margin: 8px 0 8px;
+            margin: 8px 0 10px;
+            font-weight: 700;
         }
+
         .hero-copy h1 span {
             color: #facc15;
         }
+
         .hero-copy p {
-            margin: 0 0 18px;
+            margin: 0 0 14px;
             color: #9ca3af;
             font-size: 15px;
         }
+
         .pill {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 4px 10px;
+            padding: 4px 12px;
             border-radius: 999px;
             font-size: 11px;
-            background: rgba(15,23,42,0.8);
+            background: rgba(15,23,42,0.75);
             border: 1px solid rgba(148,163,184,0.3);
             color: #e5e7eb;
         }
+
         .pill-dot {
             width: 7px;
             height: 7px;
             border-radius: 999px;
             background: #22c55e;
-            box-shadow: 0 0 10px rgba(34,197,94,0.8);
-        }
-        .hero-bullets {
-            font-size: 13px;
-            color: #9ca3af;
-            padding-left: 18px;
-            margin: 0;
-        }
-        .hero-bullets li {
-            margin-bottom: 4px;
         }
 
-        /* Chat card */
+        .hero-bullets li {
+            margin-bottom: 4px;
+            font-size: 13px;
+            color: #9ca3af;
+        }
+
+        /* ---- NEW: DATA TABLE ---- */
+        .data-table {
+            margin-top: 16px;
+            background: rgba(15,23,42,0.65);
+            border: 1px solid rgba(148,163,184,0.25);
+            padding: 12px 14px;
+            border-radius: 14px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.45);
+            font-size: 13px;
+        }
+
+        .data-table h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .data-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table td {
+            padding: 6px 0;
+            color: #cbd5e1;
+            border-bottom: 1px dashed rgba(148,163,184,0.2);
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* ---- CHAT CARD ---- */
         .chat-card {
-            background: radial-gradient(circle at top left, rgba(30,64,175,0.16), transparent 55%),
-                        rgba(15,23,42,0.97);
+            background: rgba(15,23,42,0.95);
             border-radius: 20px;
             padding: 18px 16px 16px;
             border: 1px solid rgba(148,163,184,0.35);
@@ -153,205 +172,146 @@
                 0 0 0 1px rgba(15,23,42,0.9);
             display: flex;
             flex-direction: column;
-            height: 480px;
+            height: 540px;
         }
+
         .chat-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
             margin-bottom: 8px;
         }
-        .chat-title {
-            font-size: 14px;
-            font-weight: 600;
-        }
-        .chat-sub {
-            font-size: 11px;
-            color: #9ca3af;
-        }
-        .chip-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-bottom: 8px;
-        }
-        .chip {
-            font-size: 11px;
-            padding: 3px 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.4);
-            color: #9ca3af;
-            cursor: pointer;
-            background: rgba(15,23,42,0.8);
-        }
-        .chip:hover {
-            border-color: #facc15;
-            color: #facc15;
-        }
+
         #chatbox {
             flex: 1;
             overflow-y: auto;
-            padding: 8px 2px 4px;
+            padding: 8px 2px;
             font-size: 13px;
         }
-        .msg {
-            margin-bottom: 10px;
-            line-height: 1.4;
-        }
-        .msg-user {
-            text-align: right;
-        }
-        .bubble {
-            display: inline-block;
-            padding: 8px 11px;
-            border-radius: 14px;
-            max-width: 90%;
-            text-align: left;
-        }
+
+        .msg { margin-bottom: 10px; }
+        .bubble { padding: 8px 11px; border-radius: 14px; display:inline-block; max-width: 90%; }
         .bubble-user {
             background: #1d4ed8;
-            color: #e5e7eb;
-            border-bottom-right-radius: 4px;
-            margin-left: auto;
+            color: #fff;
+            margin-left:auto;
+            border-bottom-right-radius:4px;
         }
         .bubble-assistant {
             background: #020617;
-            border: 1px solid rgba(55,65,81,0.9);
-            border-bottom-left-radius: 4px;
+            border:1px solid rgba(55,65,81,0.9);
+            border-bottom-left-radius:4px;
         }
-        .bubble-assistant strong {
-            color: #facc15;
-        }
-        .result-item {
-            margin-top: 4px;
-            padding-top: 4px;
-            border-top: 1px dashed rgba(55,65,81,0.9);
-            font-size: 12px;
-            color: #e5e7eb;
-        }
-        .result-item small {
-            color: #9ca3af;
-        }
-        .input-row {
-            margin-top: 6px;
-            display: flex;
-            gap: 8px;
-        }
+
+        .input-row { display:flex; gap:8px; margin-top:6px; }
         #userInput {
-            flex: 1;
-            padding: 9px 11px;
-            border-radius: 999px;
-            border: 1px solid #374151;
-            background: #020617;
-            color: #e5e7eb;
-            font-size: 13px;
-        }
-        #userInput:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 1px #3b82f6;
+            flex:1; padding:9px 11px;
+            border-radius:999px;
+            border:1px solid #374151;
+            background:#020617;
+            color:#e5e7eb;
         }
         #sendBtn {
-            padding: 0 16px;
-            border-radius: 999px;
-            border: none;
-            background: linear-gradient(135deg, #3b82f6, #60a5fa);
-            color: #f9fafb;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            white-space: nowrap;
+            padding:0 16px;
+            border-radius:999px;
+            border:none;
+            background:linear-gradient(135deg,#3b82f6,#60a5fa);
+            color:#fff; font-weight:600;
+            cursor:pointer;
         }
-        #sendBtn:hover {
-            filter: brightness(1.05);
-        }
-        .status {
-            font-size: 11px;
-            color: #9ca3af;
-            margin-top: 4px;
-            min-height: 14px;
-        }
-        footer {
-            margin-top: 24px;
-            font-size: 11px;
-            color: #6b7280;
-            text-align: center;
+
+        #exportCSV {
+            display:none;
+            margin-top:10px;
+            padding:7px 14px;
+            background:#0ea5e9;
+            border:none;
+            border-radius:10px;
+            color:white;
+            font-weight:600;
+            cursor:pointer;
         }
     </style>
 </head>
+
 <body>
 <div class="page">
+
     <header>
         <div class="brand">
             <div class="brand-logo">P</div>
-            <div class="brand-text">
+            <div>
                 <div class="brand-name">PELÉE AI</div>
-                <div class="brand-tagline">Internal address & data tool</div>
+                <div class="brand-tagline">Internal Data Tool</div>
             </div>
         </div>
     </header>
 
     <section class="hero">
+        <!-- LEFT COLUMN -->
         <div class="hero-copy">
             <div class="pill">
                 <span class="pill-dot"></span>
                 Internal use only · Not client facing
             </div>
+
             <h1>Pull <span>hyper-targeted</span> addresses with one prompt.</h1>
+
             <p>
                 Ask Pelée for residential or commercial addresses by city, ZIP, street,
                 income bands, home values, or any combination you’d actually use in a campaign.
             </p>
+
             <ul class="hero-bullets">
                 <li>“Strongsville, OH homes with incomes over $500k.”</li>
                 <li>“Addresses on Heatherwood Ct in Berea, OH.”</li>
                 <li>“Medina County properties with home values above $800k.”</li>
             </ul>
+
+            <!-- NEW DATA TABLE -->
+            <div class="data-table">
+                <h3>Searchable Data Fields</h3>
+                <table>
+                    <tr><td>• City / ZIP / State</td></tr>
+                    <tr><td>• County-level datasets</td></tr>
+                    <tr><td>• Income ranges (Min/Max)</td></tr>
+                    <tr><td>• Home values (Min/Max)</td></tr>
+                    <tr><td>• Street-level matching</td></tr>
+                    <tr><td>• Normalized address formatting</td></tr>
+                    <tr><td>• Latitude / Longitude</td></tr>
+                </table>
+            </div>
         </div>
 
+        <!-- RIGHT COLUMN: CHAT -->
         <div class="chat-card">
             <div class="chat-header">
-                <div>
-                    <div class="chat-title">Pelée Data Chat</div>
-                    <div class="chat-sub">Natural language → S3-enriched address lists</div>
-                </div>
-            </div>
-
-            <div class="chip-row">
-                <div class="chip" onclick="quickPrompt('Give me residential addresses in Strongsville Ohio with incomes over $500000')">
-                    Strongsville > $500k income
-                </div>
-                <div class="chip" onclick="quickPrompt('Give me addresses on Heatherwood Ct in Berea Ohio')">
-                    Heatherwood Ct, Berea
-                </div>
-                <div class="chip" onclick="quickPrompt('Show me residential addresses in Medina County Ohio with home values above $800000')">
-                    Medina > $800k value
+                <div class="chat-title">Pelée Data Chat</div>
+                <div class="chat-sub" style="font-size:11px; color:#9ca3af;">
+                    Natural language → S3-enriched address lists
                 </div>
             </div>
 
             <div id="chatbox"></div>
 
+            <button id="exportCSV">⬇️ Export Results (CSV)</button>
+
             <div class="input-row">
                 <input id="userInput"
-                       placeholder='Ask Pelée… e.g. "addresses in Strongsville Ohio with incomes over $500k"'
-                       autocomplete="off"
-                       onkeydown="if(event.key==='Enter'){event.preventDefault();sendMessage();}">
+                       placeholder='Ask Pelée… “addresses in Strongsville with incomes over $500k”'
+                       onkeydown="if(event.key==='Enter'){sendMessage();}">
                 <button id="sendBtn" onclick="sendMessage()">Send</button>
             </div>
-            <div id="status" class="status"></div>
+
+            <div id="status" style="font-size:11px; color:#9ca3af; margin-top:4px;"></div>
         </div>
     </section>
-
-    <footer>
-        AI-powered · © <span id="year"></span> Pelée LLC — Internal tooling only.
-    </footer>
 </div>
 
 <script>
+let lastFilters = null;
+
 function appendUser(msg) {
     const box = document.getElementById("chatbox");
     box.innerHTML += `
-      <div class="msg msg-user">
+      <div class="msg" style="text-align:right;">
         <div class="bubble bubble-user">${escapeHtml(msg)}</div>
       </div>`;
     box.scrollTop = box.scrollHeight;
@@ -370,11 +330,8 @@ function setStatus(text) {
     document.getElementById("status").textContent = text || "";
 }
 
-function escapeHtml(text) {
-    return String(text)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+function escapeHtml(t) {
+    return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
 async function sendMessage() {
@@ -386,11 +343,11 @@ async function sendMessage() {
     setStatus("Thinking…");
 
     try {
-        // 1) Parse natural language into filters
+        // Parse query
         const parseRes = await fetch("/parse_query", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ query: text })
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({ query:text })
         });
         const parsed = await parseRes.json();
 
@@ -400,17 +357,20 @@ async function sendMessage() {
             return;
         }
 
-        // 2) Run advanced search with filters
+        lastFilters = parsed.filters;
+
+        // Run search
         const searchRes = await fetch("/search_advanced", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(parsed.filters)
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify(parsed.filters)
         });
+
         const data = await searchRes.json();
         setStatus("");
 
         if (!data.ok) {
-            appendAssistant("Error loading data: " + (data.error || "Unknown error"));
+            appendAssistant("Error: " + (data.error || "Unknown error"));
             return;
         }
 
@@ -419,24 +379,28 @@ async function sendMessage() {
             return;
         }
 
-        let html = `<strong>${data.count}</strong> results found.<br><br>`;
-        const slice = data.results.slice(0, 40);
+        // Build result preview
+        let html = `<strong>${data.count}</strong> results found:<br><br>`;
+        const slice = data.results.slice(0,40);
+
         for (const row of slice) {
             html += `
-              <div class="result-item">
+              <div style="margin-top:4px; padding-top:4px; border-top:1px dashed rgba(55,65,81,0.9); font-size:12px;">
                 ${escapeHtml(row.address || "")}<br>
-                <small>
-                  ${escapeHtml(row.city || "")} ${escapeHtml(row.state || "")} ${escapeHtml(row.zip || "")}
-                </small>
+                <small>${escapeHtml(row.city || "")} ${escapeHtml(row.state || "")} ${escapeHtml(row.zip || "")}</small>
               </div>`;
         }
+
         if (data.count > slice.length) {
-            html += `<div style="margin-top:6px;color:#9ca3af;font-size:11px;">
-                        Showing first ${slice.length} results.
+            html += `<div style="margin-top:6px; color:#9ca3af; font-size:11px;">
+                        Showing first ${slice.length}.
                      </div>`;
         }
 
         appendAssistant(html);
+
+        // ENABLE EXPORT BUTTON
+        document.getElementById("exportCSV").style.display = "inline-block";
 
     } catch (err) {
         console.error(err);
@@ -445,19 +409,22 @@ async function sendMessage() {
     }
 }
 
-function quickPrompt(text) {
-    document.getElementById("userInput").value = text;
-    sendMessage();
-}
+document.getElementById("exportCSV").onclick = async () => {
+    if (!lastFilters) return alert("Run a search first.");
 
-document.getElementById("year").textContent = new Date().getFullYear();
+    const res = await fetch("/download_csv", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(lastFilters)
+    });
 
-// Optional: seed with a starter assistant message
-appendAssistant(
-  "Tell me what you need, like:<br>" +
-  "• <strong>“Addresses in Strongsville, OH over $500k income”</strong><br>" +
-  "• <strong>“Homes in Medina County above $800k value”</strong>"
-);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "addresses.csv";
+    a.click();
+};
 </script>
+
 </body>
 </html>
