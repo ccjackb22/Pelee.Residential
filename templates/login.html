@@ -5,96 +5,59 @@
     <title>Pelée Login</title>
     <style>
         body {
-            margin: 0;
-            background: radial-gradient(circle at top, #1f2933 0, #050814 55%);
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            color: #f9fafb;
-        }
-        .wrap {
-            min-height: 100vh;
+            background: #0f172a;
+            color: #e5e7eb;
+            font-family: system-ui;
             display: flex;
-            align-items: center;
             justify-content: center;
-            padding: 24px;
+            align-items: center;
+            height: 100vh;
         }
         .card {
-            background: rgba(10, 15, 30, 0.9);
-            border-radius: 16px;
-            padding: 32px 28px;
-            max-width: 360px;
+            background: #1e293b;
+            padding: 24px;
+            border-radius: 12px;
+            width: 320px;
+            border: 1px solid #334155;
+            text-align: center;
+        }
+        input {
             width: 100%;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.65);
-            border: 1px solid rgba(255,255,255,0.06);
-        }
-        .logo {
-            font-weight: 700;
-            letter-spacing: 0.18em;
-            font-size: 13px;
-            text-transform: uppercase;
-            color: #facc15;
-            margin-bottom: 4px;
-        }
-        h1 {
-            margin: 0 0 6px;
-            font-size: 24px;
-        }
-        p {
-            margin: 0 0 24px;
-            font-size: 14px;
-            color: #9ca3af;
-        }
-        input[type="password"] {
-            width: 100%;
-            padding: 12px 13px;
-            border-radius: 10px;
-            border: 1px solid #374151;
-            background: #020617;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #0f172a;
             color: #e5e7eb;
-            font-size: 14px;
-            box-sizing: border-box;
-        }
-        input[type="password"]:focus {
-            outline: none;
-            border-color: #3b82f6;
-            box-shadow: 0 0 0 1px #3b82f6;
+            margin-top: 10px;
         }
         button {
-            margin-top: 16px;
             width: 100%;
-            padding: 11px 14px;
-            border-radius: 999px;
+            padding: 10px;
+            margin-top: 14px;
+            background: #3b82f6;
             border: none;
-            background: linear-gradient(135deg, #3b82f6, #60a5fa);
-            color: #f9fafb;
+            border-radius: 8px;
+            color: white;
             font-weight: 600;
-            font-size: 15px;
             cursor: pointer;
         }
-        button:hover {
-            filter: brightness(1.05);
-        }
         .error {
+            color: #f87171;
+            font-size: 14px;
             margin-top: 10px;
-            font-size: 13px;
-            color: #f97373;
         }
     </style>
 </head>
 <body>
-<div class="wrap">
-    <div class="card">
-        <div class="logo">Pelée AI</div>
-        <h1>Internal Console</h1>
-        <p>Sign in to use the Pelée data tool.</p>
-
-        <form method="post">
-            <input type="password" name="password" placeholder="Password">
-            <button type="submit">Enter</button>
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
-        </form>
-    </div>
+<div class="card">
+    <h2>Pelée Access</h2>
+    <form method="POST">
+        <input type="password" name="password" placeholder="Enter Password" required />
+        <button type="submit">Login</button>
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+    </form>
 </div>
 </body>
 </html>
