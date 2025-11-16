@@ -3,13 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <title>Pelée AI – Data Tool</title>
+
     <style>
-        :root {
-            color-scheme: dark;
-        }
-        * {
-            box-sizing: border-box;
-        }
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
         body {
             margin: 0;
             min-height: 100vh;
@@ -27,7 +24,6 @@
         header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             gap: 16px;
             margin-bottom: 26px;
         }
@@ -49,10 +45,7 @@
             color: #020617;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
-        .brand-text {
-            display: flex;
-            flex-direction: column;
-        }
+        .brand-text { display: flex; flex-direction: column; }
         .brand-name {
             font-weight: 600;
             letter-spacing: 0.16em;
@@ -68,50 +61,25 @@
             grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr);
             gap: 24px;
         }
-        @media (max-width: 900px) {
-            .hero {
-                grid-template-columns: minmax(0, 1fr);
-            }
-        }
-        .hero-copy h1 {
-            font-size: 32px;
-            line-height: 1.1;
-            margin: 10px 0 10px;
-        }
-        .hero-copy h1 span {
-            color: #facc15;
-        }
-        .hero-copy p {
-            margin: 0 0 18px;
-            color: #9ca3af;
-            font-size: 15px;
-        }
+        @media (max-width: 900px) { .hero { grid-template-columns: minmax(0, 1fr); } }
+
+        .hero-copy h1 { font-size: 32px; margin: 10px 0; }
+        .hero-copy h1 span { color: #facc15; }
+        .hero-copy p { margin: 0 0 18px; color: #9ca3af; font-size: 15px; }
+
         .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 11px;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 10px; border-radius: 999px;
             background: rgba(15,23,42,0.8);
             border: 1px solid rgba(148,163,184,0.3);
-            color: #e5e7eb;
+            font-size: 11px; color: #e5e7eb;
         }
         .pill-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 999px;
+            width: 7px; height: 7px; border-radius: 999px;
             background: #22c55e;
         }
-        .hero-bullets {
-            font-size: 13px;
-            color: #9ca3af;
-            margin: 0 0 18px;
-            padding-left: 16px;
-        }
-        .hero-bullets li {
-            margin-bottom: 4px;
-        }
+        .hero-bullets { font-size: 13px; color: #9ca3af; margin: 0 0 18px; padding-left: 16px; }
+        .hero-bullets li { margin-bottom: 4px; }
 
         .left-card {
             margin-top: 10px;
@@ -120,14 +88,8 @@
             padding: 12px 14px 10px;
             border: 1px solid rgba(148,163,184,0.4);
         }
-        .left-card h3 {
-            font-size: 13px;
-            margin: 0 0 6px;
-        }
-        .left-card small {
-            color: #9ca3af;
-            font-size: 11px;
-        }
+        .left-card h3 { font-size: 13px; margin: 0 0 6px; }
+        .left-card small { color: #9ca3af; font-size: 11px; }
         .examples-list {
             margin: 4px 0 10px;
             padding-left: 16px;
@@ -135,176 +97,58 @@
             color: #d1d5db;
         }
 
-        /* Searchable fields table */
-        .fields-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-            font-size: 11px;
-            color: #cbd5f5;
-        }
-        .fields-table td {
-            padding: 3px 4px;
-            vertical-align: top;
-        }
-        .fields-table tr:nth-child(odd) {
-            background: rgba(15,23,42,0.9);
-        }
-        .fields-table-label {
-            width: 34%;
-            color: #e5e7eb;
-            font-weight: 500;
-        }
+        .fields-table { width: 100%; margin-top: 4px; font-size: 11px; color: #cbd5f5; }
+        .fields-table td { padding: 3px 4px; vertical-align: top; }
+        .fields-table tr:nth-child(odd) { background: rgba(15,23,42,0.9); }
+        .fields-table-label { width: 34%; color: #e5e7eb; font-weight: 500; }
 
-        /* Chat card */
+        /* CHAT CARD */
         .chat-card {
             background: rgba(15,23,42,0.95);
             border-radius: 20px;
-            padding: 18px 16px 16px;
+            padding: 18px 16px;
             border: 1px solid rgba(148,163,184,0.35);
-            box-shadow:
-                0 18px 55px rgba(0,0,0,0.75),
-                0 0 0 1px rgba(15,23,42,0.9);
-            display: flex;
-            flex-direction: column;
             height: 500px;
-        }
-        .chat-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }
-        .chat-title {
-            font-size: 14px;
-            font-weight: 600;
-        }
-        .chat-sub {
-            font-size: 11px;
-            color: #9ca3af;
-        }
-        .chip-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-bottom: 8px;
-        }
-        .chip {
-            font-size: 11px;
-            padding: 3px 8px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.4);
-            color: #9ca3af;
-            cursor: pointer;
-        }
-        .chip:hover {
-            border-color: #facc15;
-            color: #facc15;
+            display: flex; flex-direction: column;
         }
         #chatbox {
-            flex: 1;
-            overflow-y: auto;
+            flex: 1; overflow-y: auto;
             padding: 8px 2px 4px;
             font-size: 13px;
         }
-        .msg {
-            margin-bottom: 10px;
-            line-height: 1.4;
-        }
-        .msg-user {
-            text-align: right;
-        }
-        .bubble {
-            display: inline-block;
-            padding: 8px 11px;
-            border-radius: 14px;
-            max-width: 90%;
-            text-align: left;
-        }
-        .bubble-user {
-            background: #1d4ed8;
-            color: #e5e7eb;
-            border-bottom-right-radius: 4px;
-            margin-left: auto;
-        }
-        .bubble-assistant {
-            background: #020617;
-            border: 1px solid rgba(55,65,81,0.9);
-            border-bottom-left-radius: 4px;
-        }
-        .bubble-assistant strong {
-            color: #facc15;
-        }
-        .result-item {
-            margin-top: 4px;
-            padding-top: 4px;
-            border-top: 1px dashed rgba(55,65,81,0.9);
-            font-size: 12px;
-            color: #e5e7eb;
-        }
-        .result-item small {
-            color: #9ca3af;
-        }
-        .input-row {
-            margin-top: 6px;
-            display: flex;
-            gap: 8px;
-        }
+        .input-row { margin-top: 6px; display: flex; gap: 8px; }
         #userInput {
-            flex: 1;
-            padding: 9px 11px;
-            border-radius: 999px;
-            border: 1px solid #374151;
-            background: #020617;
-            color: #e5e7eb;
-            font-size: 13px;
+            flex: 1; padding: 9px 11px; border-radius: 999px;
+            background: #020617; border: 1px solid #374151;
+            color: #e5e7eb; font-size: 13px;
         }
         #userInput:focus {
-            outline: none;
-            border-color: #3b82f6;
+            outline: none; border-color: #3b82f6;
             box-shadow: 0 0 0 1px #3b82f6;
         }
         #sendBtn {
-            padding: 0 16px;
-            border-radius: 999px;
-            border: none;
+            padding: 0 16px; border-radius: 999px;
             background: linear-gradient(135deg, #3b82f6, #60a5fa);
-            color: #f9fafb;
-            font-weight: 600;
-            font-size: 13px;
-            cursor: pointer;
-            white-space: nowrap;
+            border: none; color: white;
+            font-weight: 600; cursor: pointer;
         }
-        #sendBtn:hover {
-            filter: brightness(1.05);
-        }
-        .status-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+
+        /* LOADING BAR */
+        #loadingBar {
+            width: 0%;
+            height: 4px;
+            background: #3b82f6;
+            border-radius: 4px;
+            transition: width 0.3s ease;
             margin-top: 6px;
-        }
-        .status {
-            font-size: 11px;
-            color: #9ca3af;
-            min-height: 14px;
-        }
-        #exportBtn {
-            font-size: 11px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(34,197,94,0.7);
-            background: rgba(22,163,74,0.12);
-            color: #bbf7d0;
-            cursor: pointer;
-        }
-        #exportBtn:hover {
-            background: rgba(22,163,74,0.2);
         }
     </style>
 </head>
+
 <body>
 <div class="page">
+
+    <!-- HEADER -->
     <header>
         <div class="brand">
             <div class="brand-logo">P</div>
@@ -315,18 +159,19 @@
         </div>
     </header>
 
+    <!-- GRID -->
     <section class="hero">
+
         <!-- LEFT SIDE -->
         <div class="hero-copy">
-            <div class="pill">
-                <span class="pill-dot"></span>
-                Internal use only · Not client facing
-            </div>
+            <div class="pill"><span class="pill-dot"></span> Internal use only · Not client facing</div>
+
             <h1>Pull <span>hyper-targeted</span> addresses with one prompt.</h1>
             <p>
                 Ask Pelée for residential or commercial addresses by city, ZIP, street,
                 income bands, home values, or any combination you’d actually use in a campaign.
             </p>
+
             <ul class="hero-bullets">
                 <li>“Strongsville, OH homes with incomes over $500k.”</li>
                 <li>“Addresses on Heatherwood Ct in Berea, OH.”</li>
@@ -343,101 +188,90 @@
                 </ul>
 
                 <h3>Searchable Data Fields</h3>
-                <small>(varies slightly by county / dataset)</small>
+                <small>(varies by county / dataset)</small>
+
                 <table class="fields-table">
                     <tbody>
-                    <tr>
-                        <td class="fields-table-label">Address</td>
-                        <td>Number, street, unit</td>
-                    </tr>
-                    <tr>
-                        <td class="fields-table-label">City / ZIP / State</td>
-                        <td>city, postcode, STUSPS</td>
-                    </tr>
-                    <tr>
-                        <td class="fields-table-label">County</td>
-                        <td>NAME, COUNTYFP, NAMELSADCO</td>
-                    </tr>
-                    <tr>
-                        <td class="fields-table-label">Census Tract</td>
-                        <td>GEOID, GEOIDFQ, TRACTCE, NAMELSAD</td>
-                    </tr>
-                    <tr>
-                        <td class="fields-table-label">Land / Water</td>
-                        <td>ALAND, AWATER</td>
-                    </tr>
-                    <tr>
-                        <td class="fields-table-label">Coordinates</td>
-                        <td>geometry.coordinates</td>
-                    </tr>
+                        <tr><td class="fields-table-label">Address</td><td>number, street, unit</td></tr>
+                        <tr><td class="fields-table-label">City / ZIP / State</td><td>city, postcode / ZIP, region / STUSPS</td></tr>
+                        <tr><td class="fields-table-label">County</td><td>NAME, COUNTYFP, NAMELSADCO</td></tr>
+                        <tr><td class="fields-table-label">Census Tract</td><td>GEOID, GEOIDFQ, TRACTCE, NAMELSAD</td></tr>
+                        <tr><td class="fields-table-label">Land / Water</td><td>ALAND, AWATER</td></tr>
+                        <tr><td class="fields-table-label">Coordinates</td><td>geometry.coordinates (lon/lat)</td></tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- RIGHT SIDE -->
+        <!-- RIGHT SIDE — CHAT -->
         <div class="chat-card">
-            <div class="chat-header">
-                <div>
-                    <div class="chat-title">Pelée Data Chat</div>
-                    <div class="chat-sub">Natural language → filtered address lists</div>
-                </div>
+
+            <div id="chatbox"></div>
+
+            <!-- LOADING BAR -->
+            <div id="loadingBar"></div>
+
+            <div class="input-row">
+                <input id="userInput" placeholder="Ask for addresses..." />
+                <button id="sendBtn">Send</button>
             </div>
-
-            <div class="chip-row">
-                <div class="chip">Strongsville > $300k income</div>
-                <div class="chip">Heatherwood Ct, Berea</div>
-                <div class="chip">Medina > $800k value</div>
-            </div>
-
-            <div id="chatbox">
-                {% if error %}
-                    <div class="msg">
-                        <div class="bubble bubble-assistant">
-                            <strong>Error:</strong> {{ error }}
-                        </div>
-                    </div>
-                {% endif %}
-
-                {% if results %}
-                    <div class="msg">
-                        <div class="bubble bubble-assistant">
-                            <strong>{{ results|length }} matches found</strong>
-                            {% for r in results %}
-                                <div class="result-item">
-                                    {{ r.properties.number }} {{ r.properties.street }} {{ r.properties.unit }},
-                                    {{ r.properties.city }}, {{ r.properties.postcode }}
-                                    <br>
-                                    <small>Tract: {{ r.properties.GEOID }}</small>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
-
-            <form action="/search" method="POST">
-                <div class="input-row">
-                    <input
-                        id="userInput"
-                        type="text"
-                        name="query"
-                        placeholder="Ask for addresses... e.g. “residential addresses in Vancouver WA with incomes over $100k”"
-                        required
-                    >
-                    <button id="sendBtn">Send</button>
-                </div>
-            </form>
 
             <div class="status-row">
-                <div class="status"></div>
-                <form action="/export" method="GET">
-                    <button id="exportBtn">Export</button>
-                </form>
+                <div class="status" id="statusBox"></div>
+                <button id="exportBtn" onclick="window.location='/export'">Export</button>
             </div>
-
         </div>
     </section>
 </div>
+
+<script>
+const sendBtn = document.getElementById("sendBtn");
+const userInput = document.getElementById("userInput");
+const chatbox  = document.getElementById("chatbox");
+const loadingBar = document.getElementById("loadingBar");
+const statusBox = document.getElementById("statusBox");
+
+async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text) return;
+
+    chatbox.innerHTML += `<div class="msg msg-user"><div class="bubble bubble-user">${text}</div></div>`;
+    userInput.value = "";
+
+    // start loading
+    loadingBar.style.width = "20%";
+
+    const res = await fetch("/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ query: text })
+    });
+
+    loadingBar.style.width = "60%";
+
+    const data = await res.json();
+    loadingBar.style.width = "100%";
+
+    if (data.error) {
+        chatbox.innerHTML += `
+            <div class="msg">
+                <div class="bubble bubble-assistant"><strong>Error:</strong> ${data.error}</div>
+            </div>`;
+        loadingBar.style.width = "0%";
+        return;
+    }
+
+    chatbox.innerHTML += `
+        <div class="msg">
+            <div class="bubble bubble-assistant">${data.message || "Done."}</div>
+        </div>`;
+
+    loadingBar.style.width = "0%";
+}
+
+sendBtn.onclick = sendMessage;
+userInput.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
+</script>
+
 </body>
 </html>
