@@ -111,7 +111,7 @@ def matches(record, f):
 
     # City
     if f.get("city"):
-        if f["city"].lower() != prop.get("city", "").lower():
+        if prop.get("city", "").lower() != f["city"].lower():
             return False
 
     # Income
@@ -166,13 +166,15 @@ def search():
         loading_state["active"] = False
         return render_template("index.html", results=[], error="Dataset not found")
 
+    # ------------ FIX HERE (return full feature, not just properties) ------------
     results = []
     for feature in dataset.get("features", []):
         if matches(feature, parsed):
-            results.append(feature["properties"])
+            results.append(feature)  # <-- FIXED
 
         if len(results) >= 500:
             break
+    # ---------------------------------------------------------------------------
 
     loading_state["active"] = False
     return render_template("index.html", results=results)
