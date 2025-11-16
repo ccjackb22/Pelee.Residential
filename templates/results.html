@@ -1,29 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search Results</title>
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Search Results</title>
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
+
 <body>
 
+  <header>
     <h1>Search Results</h1>
+    <p class="tagline">Your filtered residential & commercial address list</p>
+  </header>
+
+  <section class="result-section">
 
     <p>You searched for: <strong>{{ query }}</strong></p>
 
     {% if results and results|length > 0 %}
-        <ul>
-            {% for item in results %}
-                <li>{{ item }}</li>
-            {% endfor %}
-        </ul>
+      <p><strong>{{ results|length }}</strong> results found.</p>
+
+      <table class="result-table">
+        <thead>
+          <tr>
+            <th>Address</th>
+            <th>City</th>
+            <th>State</th>
+            <th>ZIP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in results %}
+          <tr>
+            <td>{{ r.address }}</td>
+            <td>{{ r.city }}</td>
+            <td>{{ r.state }}</td>
+            <td>{{ r.zip }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
     {% else %}
-        <p>No results found.</p>
+      <p>No results found.</p>
     {% endif %}
 
-    <br>
-    <a href="/">← Back to Search</a>
+    <br />
+    <a class="back-link" href="/">← Back to Search</a>
+
+  </section>
+
+  <footer>
+    AI-powered · © <span id="year"></span> Pelée LLC — All rights reserved.
+  </footer>
 
 </body>
 </html>
