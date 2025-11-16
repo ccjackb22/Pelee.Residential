@@ -1,7 +1,7 @@
 import os
 import json
 import boto3
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, session, jsonify
 from botocore.config import Config
 from openai import OpenAI
 
@@ -17,27 +17,34 @@ s3 = boto3.client(
 )
 
 BUCKET = "residential-data-jack"
+PASSWORD = "CaLuna"
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
+app.secret_key = os.environ.get("FLASK_SECRET", "dev-password")
 
-PASSWORD = "CaLuna"  # <<< YOUR PASSWORD
-
-
-# Loading flag for frontend
 loading_state = {"active": False}
 
 
 # ----------------------------
-# LOGIN REQUIRED DECORATOR
+# LOGIN SYSTEM
 # ----------------------------
-def login_required(func):
-    def wrapper(*args, **kwargs):
-        if not session.get("logged_in"):
-            return redirect(url_for("login"))
-        return func(*args, **kwargs)
-    wrapper.__name__ = func.__name__
-    return wrapper
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        if request.form.get("password") == PASSWORD:
+            session["logged_in"] = True
+            return redirect("/")
+        else:
+            return render_template("login.html", error="Incorrect password")
+
+    return render_template("login.html")
+
+
+@app.before_request
+def require_login():
+    allowed = ["login", "static"]
+    if request.endpoint not in allowed and not session.get("logged_in"):
+        return redirect("/login")
 
 
 # ----------------------------
@@ -69,23 +76,22 @@ def parse_query(prompt):
 
 
 # ----------------------------
-# S3 HELPER
+# S3 LOADER
 # ----------------------------
 def load_county_file(state, county_name):
     if not state or not county_name:
         return None
 
     key_prefix = f"{state.lower()}/{county_name.lower().replace(' ', '_')}"
-    possible_keys = [
+    file_options = [
         f"{key_prefix}-with-values-income.geojson",
         f"{key_prefix}.geojson"
     ]
 
-    for k in possible_keys:
+    for k in file_options:
         try:
             obj = s3.get_object(Bucket=BUCKET, Key=k)
-            data = json.loads(obj["Body"].read())
-            return data
+            return json.loads(obj["Body"].read())
         except:
             continue
 
@@ -96,12 +102,9 @@ def load_county_file(state, county_name):
 # FILTER LOGIC
 # ----------------------------
 def matches(record, f):
-    try:
-        prop = record["properties"]
-    except:
-        return False
+    prop = record.get("properties", {})
 
-    # Street match
+    # Street
     if f.get("street"):
         if f["street"].lower() not in prop.get("street", "").lower():
             return False
@@ -127,31 +130,17 @@ def matches(record, f):
 # ----------------------------
 # ROUTES
 # ----------------------------
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        pw = request.form.get("password")
-        if pw == PASSWORD:
-            session["logged_in"] = True
-            return redirect("/")
-        return render_template("login.html", error="Incorrect password")
-    return render_template("login.html")
-
-
 @app.route("/")
-@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/loading")
-@login_required
 def loading():
     return jsonify(loading_state)
 
 
 @app.route("/search", methods=["POST"])
-@login_required
 def search():
     global loading_state
     loading_state["active"] = True
@@ -159,17 +148,14 @@ def search():
     query = request.form.get("query", "")
     parsed = parse_query(query)
 
-    # Determine correct county via GPT if needed
+    # If GPT gives city+state, fetch county
     if "city" in parsed and "state" in parsed:
-        county_lookup_prompt = (
-            "Return ONLY the county name for this city.\n"
-            f"City: {parsed['city']} State: {parsed['state']}"
-        )
+        prompt = f"Return ONLY the county name for: {parsed['city']}, {parsed['state']}"
         county_resp = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
-                {"role": "system", "content": "Return county ONLY as plain text."},
-                {"role": "user", "content": county_lookup_prompt}
+                {"role": "system", "content": "Reply with county name ONLY."},
+                {"role": "user", "content": prompt}
             ]
         )
         parsed["county"] = county_resp.choices[0].message.content.strip()
@@ -180,7 +166,6 @@ def search():
         loading_state["active"] = False
         return render_template("index.html", results=[], error="Dataset not found")
 
-    # Filter results
     results = []
     for feature in dataset.get("features", []):
         if matches(feature, parsed):
@@ -193,5 +178,8 @@ def search():
     return render_template("index.html", results=results)
 
 
+# ----------------------------
+# RUN
+# ----------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
