@@ -1,36 +1,172 @@
 import os
 import json
-from flask import Flask, render_template, request, redirect, session, send_file
-from dotenv import load_dotenv
-import boto3
 import io
 
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    session,
+    send_file,
+)
+from dotenv import load_dotenv
+import boto3
+
+# -----------------------------------------------------------
+# ENV & CLIENTS
+# -----------------------------------------------------------
 load_dotenv()
 
-# ------------------------------------------------------
-# FLASK + SESSION
-# ------------------------------------------------------
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
 
+# Use the same names you set in Render
+app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
 PASSWORD = os.getenv("ACCESS_PASSWORD", "CaLuna")
 
-BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
-REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-2")
+S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
-# ------------------------------------------------------
-# S3 CLIENT
-# ------------------------------------------------------
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-2")
+
 s3 = boto3.client(
     "s3",
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=REGION
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_DEFAULT_REGION,
 )
 
-# ------------------------------------------------------
-# LOGIN PAGE
-# ------------------------------------------------------
+
+# -----------------------------------------------------------
+# SIMPLE DATASET SELECTION (HARD-WIRED FOR NOW)
+# -----------------------------------------------------------
+def choose_dataset_for_state(state_abbr: str) -> str | None:
+    """
+    For now we hard-wire to a single known file for OH, so we stop
+    doing crazy multi-county scans that blow up memory / timeouts.
+    """
+    state_abbr = (state_abbr or "").upper()
+
+    # From your S3 listing:
+    # 2025-10-31 13:12:42 322687245 merged_with_tracts/oh/cuyahoga-with-values-income.geojson
+    if state_abbr == "OH":
+        return "merged_with_tracts/oh/cuyahoga-with-values-income.geojson"
+
+    # Optional small test dataset (Alaska) if you want:
+    if state_abbr == "AK":
+        return "merged_with_tracts/ak/haines-with-values-income.geojson"
+
+    # Anything else not wired yet
+    return None
+
+
+# -----------------------------------------------------------
+# S3 HELPER
+# -----------------------------------------------------------
+def load_geojson_from_s3(key: str) -> dict | None:
+    """Download a single GeoJSON file from S3 and parse it."""
+    try:
+        print(f"[DEBUG] Fetching S3 object: bucket={S3_BUCKET}, key={key}")
+        obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
+        body = obj["Body"].read()
+        print(f"[DEBUG] Downloaded {len(body)} bytes from {key}")
+        data = json.loads(body.decode("utf-8"))
+        return data
+    except Exception as e:
+        print(f"[ERROR] S3 read failed for {key}: {e}")
+        return None
+
+
+# -----------------------------------------------------------
+# QUERY PARSING
+# -----------------------------------------------------------
+STATE_NAMES = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM",
+    "new york": "NY", "north carolina": "NC", "north dakota": "ND",
+    "ohio": "OH", "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA",
+    "rhode island": "RI", "south carolina": "SC", "south dakota": "SD",
+    "tennessee": "TN", "texas": "TX", "utah": "UT", "vermont": "VT",
+    "virginia": "VA", "washington": "WA", "west virginia": "WV",
+    "wisconsin": "WI", "wyoming": "WY",
+}
+
+
+def parse_query(q: str):
+    """
+    Very simple parsing:
+    - find a spelled-out state name (ohio, florida, etc.)
+    - city = first word after 'in' / 'near' / 'at' (if present)
+    NOTE: we intentionally IGNORE numeric filters for now.
+    """
+    q = (q or "").strip()
+    q_lower = q.lower()
+
+    # State
+    state_abbr = None
+    for name, abbr in STATE_NAMES.items():
+        if name in q_lower:
+            state_abbr = abbr
+            break
+
+    # City (naive but works for "addresses in strongsville ohio")
+    words = q_lower.replace(",", "").split()
+    city = None
+    for i, w in enumerate(words):
+        if w in ("in", "near", "at"):
+            if i + 1 < len(words):
+                city = words[i + 1]
+                break
+
+    print(f"[DEBUG] parse_query → state={state_abbr}, city={city}")
+    return state_abbr, city
+
+
+# -----------------------------------------------------------
+# FILTERING
+# -----------------------------------------------------------
+def filter_features(features, city: str | None = None, limit: int = 500):
+    """
+    Filter only by CITY for now. No income/home-value filtering yet.
+    We cap at 'limit' results to keep response safe.
+    """
+    results = []
+    city_norm = city.lower() if city else None
+
+    for f in features:
+        props = f.get("properties", {})
+
+        if city_norm:
+            prop_city = str(props.get("city", "")).lower()
+            if prop_city != city_norm:
+                continue
+
+        results.append({
+            "number": props.get("number", ""),
+            "street": props.get("street", ""),
+            "unit": props.get("unit", ""),
+            "city": props.get("city", ""),
+            "postcode": props.get("postcode", ""),
+            "region": props.get("region", ""),
+        })
+
+        if len(results) >= limit:
+            break
+
+    print(f"[DEBUG] filter_features → returned {len(results)} rows")
+    return results
+
+
+# -----------------------------------------------------------
+# AUTH
+# -----------------------------------------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -41,187 +177,87 @@ def login():
         return render_template("login.html", error="Incorrect password.")
     return render_template("login.html")
 
-# ------------------------------------------------------
-# HOME PAGE
-# ------------------------------------------------------
+
+# -----------------------------------------------------------
+# HOME
+# -----------------------------------------------------------
 @app.route("/")
 def home():
     if not session.get("logged_in"):
         return redirect("/login")
     return render_template("index.html")
 
-# ------------------------------------------------------
-# S3: LOAD ONE GEOJSON
-# ------------------------------------------------------
-def load_geojson_from_s3(key):
-    try:
-        obj = s3.get_object(Bucket=BUCKET, Key=key)
-        txt = obj["Body"].read().decode("utf-8")
-        return json.loads(txt)
-    except Exception as e:
-        print("S3 READ ERROR:", e)
-        return None
 
-# ------------------------------------------------------
-# FIND COUNTY FILES FOR A GIVEN STATE
-# ------------------------------------------------------
-def list_state_files(state_abbrev):
-    prefix = f"merged_with_tracts/{state_abbrev.lower()}/"
-    try:
-        objects = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix)
-    except Exception as e:
-        print("S3 LIST ERROR:", e)
-        return []
-
-    if "Contents" not in objects:
-        return []
-
-    return [obj["Key"] for obj in objects["Contents"] if obj["Key"].endswith(".geojson")]
-
-# ------------------------------------------------------
-# PARSE USER QUERY
-# Extract: state abbrev, city name (simple heuristic)
-# ------------------------------------------------------
-def parse_query(query):
-    q = query.lower().strip()
-
-    states = {
-        "alabama": "AL","alaska": "AK","arizona": "AZ","arkansas": "AR","california": "CA",
-        "colorado": "CO","connecticut": "CT","delaware": "DE","florida": "FL","georgia": "GA",
-        "hawaii": "HI","idaho": "ID","illinois": "IL","indiana": "IN","iowa": "IA","kansas": "KS",
-        "kentucky": "KY","louisiana": "LA","maine": "ME","maryland": "MD","massachusetts": "MA",
-        "michigan": "MI","minnesota": "MN","mississippi": "MS","missouri": "MO","montana": "MT",
-        "nebraska": "NE","nevada": "NV","new hampshire": "NH","new jersey": "NJ","new mexico": "NM",
-        "new york": "NY","north carolina": "NC","north dakota": "ND","ohio": "OH","oklahoma": "OK",
-        "oregon": "OR","pennsylvania": "PA","rhode island": "RI","south carolina": "SC",
-        "south dakota": "SD","tennessee": "TN","texas": "TX","utah": "UT","vermont": "VT",
-        "virginia": "VA","washington": "WA","west virginia": "WV","wisconsin": "WI","wyoming": "WY"
-    }
-
-    # Detect state
-    found_state = None
-    for long_name, abbr in states.items():
-        if long_name.lower() in q:
-            found_state = abbr
-            break
-        if f" {abbr.lower()} " in q:
-            found_state = abbr
-            break
-
-    # Detect city after words like "in" or "near"
-    words = q.replace(",", "").split()
-    city = None
-    for i, w in enumerate(words):
-        if w in ["in", "near", "at"]:
-            if i + 1 < len(words):
-                city = words[i + 1]
-                break
-
-    return found_state, city
-
-# ------------------------------------------------------
-# CITY-AWARE FEATURE FILTERING
-# Robust detection of ANY city-field naming
-# ------------------------------------------------------
-def filter_features(features, city_name):
-    if not city_name:
-        return []  # we require a city for now
-
-    city_name = city_name.lower()
-
-    # All possible names that counties use
-    city_keys = [
-        "city","City","CITY",
-        "town","Town","TOWN",
-        "place","Place","PLACE",
-        "municipality","Municipality","MUNICIPALITY",
-        "locality","Locality","LOCALITY",
-        "community","Community","COMMUNITY"
-    ]
-
-    results = []
-
-    for f in features:
-        p = f.get("properties", {})
-        if not isinstance(p, dict):
-            continue
-
-        found_city_value = None
-        for ck in city_keys:
-            if ck in p and isinstance(p[ck], str):
-                found_city_value = p[ck].lower()
-                break
-
-        # If we found a city value, match it
-        if found_city_value and found_city_value == city_name:
-            results.append({
-                "number": p.get("number", ""),
-                "street": p.get("street", ""),
-                "unit": p.get("unit", ""),
-                "city": p.get("city", "") or p.get("City", "") or "",
-                "postcode": p.get("postcode", ""),
-                "region": p.get("region", "")
-            })
-
-    return results
-
-# ------------------------------------------------------
-# SEARCH ENDPOINT
-# ------------------------------------------------------
+# -----------------------------------------------------------
+# SEARCH
+# -----------------------------------------------------------
 @app.route("/search", methods=["POST"])
 def search():
     if not session.get("logged_in"):
         return redirect("/login")
 
     query = request.form.get("query", "")
-    state, city = parse_query(query)
+    print(f"[DEBUG] /search query='{query}'")
 
-    if not state:
-        return render_template("index.html", error="Couldn't detect a state.")
+    state_abbr, city = parse_query(query)
 
-    if not city:
-        return render_template("index.html", error="Couldn't detect a city.")
+    if not state_abbr:
+        return render_template(
+            "index.html",
+            error="Couldn't detect a state. Try e.g. 'residential addresses in strongsville ohio'."
+        )
 
-    # Load only ONE county at a time until we find matches
-    files = list_state_files(state)
+    dataset_key = choose_dataset_for_state(state_abbr)
+    if not dataset_key:
+        return render_template(
+            "index.html",
+            error=f"No dataset wired yet for state {state_abbr}. Right now only OH (Cuyahoga) is connected."
+        )
 
-    if not files:
-        return render_template("index.html", error=f"No datasets found for {state}.")
+    data = load_geojson_from_s3(dataset_key)
+    if not data or "features" not in data:
+        return render_template(
+            "index.html",
+            error=f"Failed to load dataset for {state_abbr} (key={dataset_key})."
+        )
 
-    all_results = []
+    features = data["features"]
+    results = filter_features(features, city=city, limit=500)
 
-    for key in files:
-        data = load_geojson_from_s3(key)
-        if not data or "features" not in data:
-            continue
+    if not results:
+        return render_template(
+            "index.html",
+            error="No matching addresses found. Try 'addresses in westlake ohio' or 'addresses in strongsville ohio'."
+        )
 
-        matched = filter_features(data["features"], city)
-        if matched:
-            all_results.extend(matched)
-            break   # stop after first county hit
+    return render_template("index.html", results=results)
 
-    if not all_results:
-        return render_template("index.html", error="No matching addresses found.")
 
-    return render_template("index.html", results=all_results)
-
-# ------------------------------------------------------
-# EXPORT
-# ------------------------------------------------------
+# -----------------------------------------------------------
+# EXPORT (DUMMY FOR NOW)
+# -----------------------------------------------------------
 @app.route("/export")
 def export():
     if not session.get("logged_in"):
         return redirect("/login")
 
-    # Dummy export for now
+    # Right now this just dumps whatever is in 'results' in a simple way.
+    # For a real export, you'd store the last search in session and re-use it here.
+    dummy = [{"status": "export not yet wired"}]
     buf = io.BytesIO()
-    buf.write(json.dumps({"export": "ok"}, indent=2).encode("utf-8"))
+    buf.write(json.dumps(dummy, indent=2).encode("utf-8"))
     buf.seek(0)
-    return send_file(buf, mimetype="application/json",
-                     as_attachment=True, download_name="results.json")
+    return send_file(
+        buf,
+        mimetype="application/json",
+        as_attachment=True,
+        download_name="export.json",
+    )
 
-# ------------------------------------------------------
+
+# -----------------------------------------------------------
 # MAIN
-# ------------------------------------------------------
+# -----------------------------------------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Local dev only; Render runs gunicorn.
+    app.run(host="0.0.0.0", port=5000, debug=True)
