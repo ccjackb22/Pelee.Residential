@@ -1,198 +1,206 @@
 import os
 import json
+from flask import Flask, render_template, request, redirect, session, send_file
+from dotenv import load_dotenv
 import boto3
-from flask import Flask, render_template, request, redirect, session, jsonify
-from botocore.config import Config
-from openai import OpenAI
+import io
 
-# ----------------------------
-# CONFIG
-# ----------------------------
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+load_dotenv()
+
+app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
+
+PASSWORD = os.getenv("ACCESS_PASSWORD", "CaLuna")
+
+BUCKET = "residential-data-jack"
 
 s3 = boto3.client(
     "s3",
-    region_name="us-east-2",
-    config=Config(signature_version="s3v4")
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name="us-east-2"
 )
 
-BUCKET = "residential-data-jack"
-PASSWORD = "CaLuna"
-
-app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET", "dev-password")
-
-loading_state = {"active": False}
-
-
-# ----------------------------
+# -----------------------------------------------------------
 # LOGIN
-# ----------------------------
+# -----------------------------------------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("password") == PASSWORD:
+        pw = request.form.get("password", "").strip()
+        if pw == PASSWORD:
             session["logged_in"] = True
             return redirect("/")
-        else:
-            return render_template("login.html", error="Incorrect password")
-
+        return render_template("login.html", error="Incorrect password.")
     return render_template("login.html")
 
 
-@app.before_request
-def require_login():
-    allowed = ["login", "static"]
-    if request.endpoint not in allowed and not session.get("logged_in"):
+# -----------------------------------------------------------
+# HOME
+# -----------------------------------------------------------
+@app.route("/")
+def home():
+    if not session.get("logged_in"):
         return redirect("/login")
+    return render_template("index.html")
 
 
-# ----------------------------
-# GPT QUERY PARSER
-# ----------------------------
-def parse_query(prompt):
-    system_msg = (
-        "Convert user real-estate queries into structured filters.\n"
-        "Return JSON ONLY.\n"
-        "Allowed keys: city, state, street, min_income, max_income, min_value, max_value.\n"
-        "Never include county.\n"
-        "Never return commentary — JSON only."
-    )
-
-    resp = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
+# -----------------------------------------------------------
+# READ GEOJSON FROM S3
+# -----------------------------------------------------------
+def load_geojson_from_s3(key):
     try:
-        return json.loads(resp.choices[0].message.content)
-    except:
-        return {}
+        obj = s3.get_object(Bucket=BUCKET, Key=key)
+        txt = obj["Body"].read().decode("utf-8")
+        return json.loads(txt)
+    except Exception as e:
+        print("S3 READ ERROR:", e)
+        return None
 
 
-# ----------------------------
-# LOAD ALL COUNTY FILES FOR A STATE
-# ----------------------------
+# -----------------------------------------------------------
+# LIST ALL GEOJSON FILES FOR A STATE
+# -----------------------------------------------------------
 def list_state_county_files(state):
-    """
-    Example return:
-    [
-        "merged_with_tracts/oh/cuyahoga.geojson",
-        "merged_with_tracts/oh/cuyahoga-with-values-income.geojson",
-        ...
-    ]
-    """
+    """Returns all .geojson county files inside merged_with_tracts/{state}/"""
     prefix = f"merged_with_tracts/{state.lower()}/"
     objects = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix)
 
     if "Contents" not in objects:
         return []
 
-    return [obj["Key"] for obj in objects["Contents"] if obj["Key"].ends_with(".geojson")]
+    return [
+        obj["Key"]
+        for obj in objects["Contents"]
+        if obj["Key"].endswith(".geojson")   # FIXED HERE
+    ]
 
 
-def load_geojson(key):
-    try:
-        obj = s3.get_object(Bucket=BUCKET, Key=key)
-        return json.loads(obj["Body"].read())
-    except:
-        return None
+# -----------------------------------------------------------
+# PARSE QUERY → STATE, CITY, LIMITER
+# -----------------------------------------------------------
+def parse_query(q):
+    q = q.lower().strip()
+
+    states = {
+        "alabama": "AL","alaska": "AK","arizona": "AZ","arkansas": "AR","california": "CA",
+        "colorado": "CO","connecticut": "CT","delaware": "DE","florida": "FL","georgia": "GA",
+        "hawaii": "HI","idaho": "ID","illinois": "IL","indiana": "IN","iowa": "IA","kansas": "KS",
+        "kentucky": "KY","louisiana": "LA","maine": "ME","maryland": "MD","massachusetts": "MA",
+        "michigan": "MI","minnesota": "MN","mississippi": "MS","missouri": "MO","montana": "MT",
+        "nebraska": "NE","nevada": "NV","new hampshire": "NH","new jersey": "NJ","new mexico": "NM",
+        "new york": "NY","north carolina": "NC","north dakota": "ND","ohio": "OH","oklahoma": "OK",
+        "oregon": "OR","pennsylvania": "PA","rhode island": "RI","south carolina": "SC",
+        "south dakota": "SD","tennessee": "TN","texas": "TX","utah": "UT","vermont": "VT",
+        "virginia": "VA","washington": "WA","west virginia": "WV","wisconsin": "WI","wyoming": "WY"
+    }
+
+    found_state = None
+    for name, abbr in states.items():
+        if name.lower() in q:
+            found_state = abbr
+            break
+
+    numeric_words = {}
+    if "over" in q:
+        try:
+            val = int("".join(filter(str.isdigit, q)))
+            numeric_words["min_value"] = val
+        except:
+            pass
+
+    words = q.replace(",", "").split()
+    city = None
+    for i, w in enumerate(words):
+        if w in ["in", "near", "at"]:
+            if i + 1 < len(words):
+                city = words[i + 1]
+                break
+
+    return found_state, city, numeric_words
 
 
-# ----------------------------
-# MATCHING LOGIC
-# ----------------------------
-def matches(record, f):
-    prop = record.get("properties", {})
+# -----------------------------------------------------------
+# FILTER GEOJSON FEATURES
+# -----------------------------------------------------------
+def filter_features(features, city=None, min_value=None):
+    results = []
+    for f in features:
+        p = f.get("properties", {})
 
-    # Street
-    if f.get("street"):
-        if f["street"].lower() not in prop.get("street", "").lower():
-            return False
+        if city and p.get("city", "").lower() != city.lower():
+            continue
 
-    # City
-    if f.get("city"):
-        if f["city"].lower() != prop.get("city", "").lower():
-            return False
+        if min_value and p.get("income") and p["income"] < min_value:
+            continue
 
-    # Income
-    if f.get("min_income") and prop.get("DP03_0062E"):
-        if prop["DP03_0062E"] < f["min_income"]:
-            return False
+        results.append({
+            "number": p.get("number", ""),
+            "street": p.get("street", ""),
+            "unit": p.get("unit", ""),
+            "city": p.get("city", ""),
+            "postcode": p.get("postcode", ""),
+            "region": p.get("region", "")
+        })
 
-    # Value
-    if f.get("min_value") and prop.get("DP04_0089E"):
-        if prop["DP04_0089E"] < f["min_value"]:
-            return False
-
-    return True
+    return results
 
 
-# ----------------------------
-# MAIN SEARCH ROUTE
-# ----------------------------
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-@app.route("/loading")
-def loading():
-    return jsonify(loading_state)
-
-
+# -----------------------------------------------------------
+# SEARCH ENDPOINT
+# -----------------------------------------------------------
 @app.route("/search", methods=["POST"])
 def search():
-    global loading_state
-    loading_state["active"] = True
+    if not session.get("logged_in"):
+        return redirect("/login")
 
-    query = request.form.get("query", "")
-    f = parse_query(query)
+    q = request.form.get("query", "")
+    state, city, filters = parse_query(q)
 
-    if "state" not in f:
-        loading_state["active"] = False
-        return render_template("index.html", results=[], error="State not recognized from query.")
+    if not state:
+        return render_template("index.html", error="Could not find a state in your query.")
 
-    state = f["state"].lower()
-
-    # List all counties for that state
     files = list_state_county_files(state)
 
     if not files:
-        loading_state["active"] = False
-        return render_template("index.html", results=[], error=f"No datasets found for state {state.upper()}.")
+        return render_template("index.html", error=f"No datasets found for {state}.")
 
     all_results = []
 
-    # Iterate through ALL county files for that state
     for key in files:
-        data = load_geojson(key)
-        if not data:
+        data = load_geojson_from_s3(key)
+        if not data or "features" not in data:
             continue
 
-        for feature in data.get("features", []):
-            if matches(feature, f):
-                all_results.append(feature["properties"])
+        res = filter_features(
+            data["features"],
+            city=city,
+            min_value=filters.get("min_value")
+        )
+        all_results.extend(res)
 
-            if len(all_results) >= 500:
-                break
-
-        if len(all_results) >= 500:
-            break
-
-    loading_state["active"] = False
-
-    if not all_results:
-        return render_template("index.html", results=[], error="No matching addresses found.")
+    if len(all_results) == 0:
+        return render_template("index.html", error="No matching addresses found.")
 
     return render_template("index.html", results=all_results)
 
 
-# ----------------------------
-# RUN
-# ----------------------------
+# -----------------------------------------------------------
+# EXPORT
+# -----------------------------------------------------------
+@app.route("/export")
+def export():
+    if not session.get("logged_in"):
+        return redirect("/login")
+
+    dummy = [{"status": "export works"}]
+
+    buf = io.BytesIO()
+    buf.write(json.dumps(dummy, indent=2).encode("utf-8"))
+    buf.seek(0)
+    return send_file(buf, mimetype="application/json", as_attachment=True, download_name="export.json")
+
+
+# -----------------------------------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
