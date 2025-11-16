@@ -11,7 +11,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
 
 PASSWORD = os.getenv("ACCESS_PASSWORD", "CaLuna")
-
 BUCKET = "residential-data-jack"
 
 s3 = boto3.client(
@@ -20,7 +19,6 @@ s3 = boto3.client(
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
     region_name="us-east-2"
 )
-
 
 # -----------------------------------------------------------
 # LOGIN
@@ -47,102 +45,108 @@ def home():
 
 
 # -----------------------------------------------------------
-# READ GEOJSON FROM S3
+# LIST GEOJSON FILES FOR A STATE
 # -----------------------------------------------------------
-def load_geojson_from_s3(key):
-    try:
-        obj = s3.get_object(Bucket=BUCKET, Key=key)
-        txt = obj["Body"].read().decode("utf-8")
-        return json.loads(txt)
-    except Exception as e:
-        print("S3 READ ERROR:", e)
-        return None
-
-
-# -----------------------------------------------------------
-# LIST ALL GEOJSON FILES FOR A STATE
-# -----------------------------------------------------------
-def list_state_county_files(state):
-    """Returns all .geojson county files inside merged_with_tracts/{state}/"""
+def list_state_files(state):
     prefix = f"merged_with_tracts/{state.lower()}/"
     objects = s3.list_objects_v2(Bucket=BUCKET, Prefix=prefix)
 
     if "Contents" not in objects:
         return []
 
-    return [
-        obj["Key"]
-        for obj in objects["Contents"]
-        if obj["Key"].endswith(".geojson")
-    ]
+    return [obj["Key"] for obj in objects["Contents"] if obj["Key"].endswith(".geojson")]
 
 
 # -----------------------------------------------------------
-# PARSE QUERY → STATE, CITY, LIMITER
+# LIGHTWEIGHT CITY CHECK (only first 200 lines)
+# -----------------------------------------------------------
+def county_might_contain_city(key, city):
+    """Reads only the first ~200 lines of the GeoJSON and checks if the city string appears."""
+    try:
+        stream = s3.get_object(Bucket=BUCKET, Key=key)["Body"]
+        first_part = stream.read(30000).decode("utf-8", errors="ignore")
+        return city.lower() in first_part.lower()
+    except Exception as e:
+        print("STREAM CHECK ERROR:", e)
+        return False
+
+
+# -----------------------------------------------------------
+# LOAD FULL GEOJSON (only when needed)
+# -----------------------------------------------------------
+def load_full_geojson(key):
+    try:
+        obj = s3.get_object(Bucket=BUCKET, Key=key)
+        txt = obj["Body"].read().decode("utf-8")
+        return json.loads(txt)
+    except Exception as e:
+        print("FULL LOAD ERROR:", e)
+        return None
+
+
+# -----------------------------------------------------------
+# PARSE QUERY → STATE, CITY, LIMITS
 # -----------------------------------------------------------
 def parse_query(q):
     q = q.lower().strip()
 
     states = {
-        "alabama": "AL","alaska": "AK","arizona": "AZ","arkansas": "AR","california": "CA",
-        "colorado": "CO","connecticut": "CT","delaware": "DE","florida": "FL","georgia": "GA",
-        "hawaii": "HI","idaho": "ID","illinois": "IL","indiana": "IN","iowa": "IA","kansas": "KS",
-        "kentucky": "KY","louisiana": "LA","maine": "ME","maryland": "MD","massachusetts": "MA",
-        "michigan": "MI","minnesota": "MN","mississippi": "MS","missouri": "MO","montana": "MT",
-        "nebraska": "NE","nevada": "NV","new hampshire": "NH","new jersey": "NJ","new mexico": "NM",
-        "new york": "NY","north carolina": "NC","north dakota": "ND","ohio": "OH","oklahoma": "OK",
-        "oregon": "OR","pennsylvania": "PA","rhode island": "RI","south carolina": "SC",
-        "south dakota": "SD","tennessee": "TN","texas": "TX","utah": "UT","vermont": "VT",
-        "virginia": "VA","washington": "WA","west virginia": "WV","wisconsin": "WI","wyoming": "WY"
+        "alabama":"AL","alaska":"AK","arizona":"AZ","arkansas":"AR","california":"CA",
+        "colorado":"CO","connecticut":"CT","delaware":"DE","florida":"FL","georgia":"GA",
+        "hawaii":"HI","idaho":"ID","illinois":"IL","indiana":"IN","iowa":"IA","kansas":"KS",
+        "kentucky":"KY","louisiana":"LA","maine":"ME","maryland":"MD","massachusetts":"MA",
+        "michigan":"MI","minnesota":"MN","mississippi":"MS","missouri":"MO","montana":"MT",
+        "nebraska":"NE","nevada":"NV","new hampshire":"NH","new jersey":"NJ","new mexico":"NM",
+        "new york":"NY","north carolina":"NC","north dakota":"ND","ohio":"OH","oklahoma":"OK",
+        "oregon":"OR","pennsylvania":"PA","rhode island":"RI","south carolina":"SC",
+        "south dakota":"SD","tennessee":"TN","texas":"TX","utah":"UT","vermont":"VT",
+        "virginia":"VA","washington":"WA","west virginia":"WV","wisconsin":"WI","wyoming":"WY"
     }
 
-    found_state = None
+    state = None
     for name, abbr in states.items():
-        if name.lower() in q:
-            found_state = abbr
+        if name in q:
+            state = abbr
             break
 
-    # numeric filter
-    numeric_words = {}
+    # Pull city name
+    city = None
+    words = q.replace(",", "").split()
+    for i, w in enumerate(words):
+        if w in ["in", "near", "at"] and i + 1 < len(words):
+            city = words[i + 1]
+            break
+
+    # Simple numeric extraction (income/home value)
+    filters = {}
     if "over" in q:
         try:
-            val = int("".join(filter(str.isdigit, q)))
-            numeric_words["min_value"] = val
+            filters["min_value"] = int("".join([c for c in q if c.isdigit()]))
         except:
             pass
 
-    # attempt to detect simple city word after "in"
-    words = q.replace(",", "").split()
-    city = None
-    for i, w in enumerate(words):
-        if w in ["in", "near", "at"]:
-            if i + 1 < len(words):
-                city = words[i + 1]
-                break
-
-    return found_state, city, numeric_words
+    return state, city, filters
 
 
 # -----------------------------------------------------------
-# FILTER GEOJSON FEATURES  (FIXED)
+# FILTER ACTUAL FEATURES
 # -----------------------------------------------------------
 def filter_features(features, city=None, min_value=None):
-    results = []
+    out = []
+    city = city.lower() if city else None
+
     for f in features:
         p = f.get("properties", {})
 
-        if city and p.get("city", "").lower() != city.lower():
+        if city and p.get("city", "").lower() != city:
             continue
 
-        # SAFE min_value filtering
         if min_value:
-            # DP04_0089E = home value
-            # DP03_0062E = household income
-            val = p.get("DP04_0089E") or p.get("DP03_0062E")
-            if isinstance(val, (int, float)) and val < min_value:
+            val = p.get("income") or p.get("home_value") or None
+            if val is None or val < min_value:
                 continue
 
-        results.append({
+        out.append({
             "number": p.get("number", ""),
             "street": p.get("street", ""),
             "unit": p.get("unit", ""),
@@ -151,46 +155,47 @@ def filter_features(features, city=None, min_value=None):
             "region": p.get("region", "")
         })
 
-    return results
+    return out
 
 
 # -----------------------------------------------------------
-# SEARCH ENDPOINT
+# SEARCH (ONE-COUNTY LOADER)
 # -----------------------------------------------------------
 @app.route("/search", methods=["POST"])
 def search():
     if not session.get("logged_in"):
         return redirect("/login")
 
-    q = request.form.get("query", "")
-    state, city, filters = parse_query(q)
+    query = request.form.get("query", "")
+    state, city, filters = parse_query(query)
 
     if not state:
-        return render_template("index.html", error="Could not find a state in your query.")
+        return render_template("index.html", error="Couldn't detect a state.")
 
-    files = list_state_county_files(state)
-
+    files = list_state_files(state)
     if not files:
-        return render_template("index.html", error=f"No datasets found for {state}.")
+        return render_template("index.html", error=f"No datasets for {state}.")
 
-    all_results = []
-
+    # Try counties one by one
     for key in files:
-        data = load_geojson_from_s3(key)
+        if city and not county_might_contain_city(key, city):
+            continue
+
+        data = load_full_geojson(key)
         if not data or "features" not in data:
             continue
 
-        res = filter_features(
+        results = filter_features(
             data["features"],
             city=city,
             min_value=filters.get("min_value")
         )
-        all_results.extend(res)
 
-    if len(all_results) == 0:
-        return render_template("index.html", error="No matching addresses found.")
+        if results:
+            return render_template("index.html", results=results)
 
-    return render_template("index.html", results=all_results)
+    # No matches in any county
+    return render_template("index.html", error="No matching addresses found.")
 
 
 # -----------------------------------------------------------
@@ -201,8 +206,7 @@ def export():
     if not session.get("logged_in"):
         return redirect("/login")
 
-    dummy = [{"status": "export works"}]
-
+    dummy = [{"status": "export OK"}]
     buf = io.BytesIO()
     buf.write(json.dumps(dummy, indent=2).encode("utf-8"))
     buf.seek(0)
