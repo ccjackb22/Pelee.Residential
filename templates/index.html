@@ -1,168 +1,355 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pelée | AI Address Search</title>
-
-    <!-- Tailwind CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Google Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet" />
+    <meta charset="UTF-8">
+    <title>Pelee AI - Data Tool</title>
 
     <style>
+        :root {
+            color-scheme: dark;
+        }
+        * { box-sizing: border-box; }
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #e8ecf3, #f5f7fa);
+            margin: 0;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top left, #1e293b 0, transparent 55%),
+                radial-gradient(circle at top right, #0f172a 0, #020617 60%);
+            color: #e5e7eb;
         }
-        .glass {
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(12px);
+        .page {
+            max-width: 1150px;
+            margin: 0 auto;
+            padding: 32px 20px 40px;
         }
-        .animate-fade {
-            animation: fadeIn 0.6s ease-in-out;
+        header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 26px;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
-            to { opacity: 1; transform: translateY(0); }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .brand-logo {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            background: radial-gradient(circle at 30% 30%, #facc15, #f97316);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 18px;
+            color: #020617;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+        .brand-text { display: flex; flex-direction: column; }
+        .brand-name {
+            font-weight: 600;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+        .brand-tagline { font-size: 13px; color: #9ca3af; }
+
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.05fr);
+            gap: 24px;
+        }
+        @media (max-width: 900px) {
+            .hero { grid-template-columns: 1fr; }
+        }
+
+        .hero-copy h1 {
+            font-size: 32px;
+            line-height: 1.1;
+            margin: 10px 0 10px;
+        }
+        .hero-copy h1 span { color: #facc15; }
+        .hero-copy p { margin: 0 0 18px; color: #9ca3af; font-size: 15px; }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(15,23,42,0.8);
+            border: 1px solid rgba(148,163,184,0.3);
+            color: #e5e7eb;
+        }
+        .pill-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: #22c55e;
+        }
+
+        .hero-bullets {
+            font-size: 13px;
+            color: #9ca3af;
+            margin: 0 0 18px;
+            padding-left: 16px;
+        }
+        .hero-bullets li { margin-bottom: 4px; }
+
+        .left-card {
+            margin-top: 10px;
+            background: rgba(15,23,42,0.9);
+            border-radius: 16px;
+            padding: 12px 14px 10px;
+            border: 1px solid rgba(148,163,184,0.4);
+        }
+        .left-card h3 { font-size: 13px; margin: 0 0 6px; }
+        .left-card small { color: #9ca3af; font-size: 11px; }
+
+        .examples-list {
+            margin: 4px 0 10px;
+            padding-left: 16px;
+            font-size: 12px;
+            color: #d1d5db;
+        }
+
+        .fields-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 4px;
+            font-size: 11px;
+            color: #cbd5f5;
+        }
+        .fields-table td {
+            padding: 3px 4px;
+            vertical-align: top;
+        }
+        .fields-table tr:nth-child(odd) {
+            background: rgba(15,23,42,0.9);
+        }
+        .fields-table-label {
+            width: 34%;
+            color: #e5e7eb;
+            font-weight: 500;
+        }
+
+        .chat-card {
+            background: rgba(15,23,42,0.95);
+            border-radius: 20px;
+            padding: 18px 16px 16px;
+            border: 1px solid rgba(148,163,184,0.35);
+            box-shadow:
+                0 18px 55px rgba(0,0,0,0.75),
+                0 0 0 1px rgba(15,23,42,0.9);
+            display: flex;
+            flex-direction: column;
+            height: 500px;
+        }
+
+        .chat-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .chat-title { font-size: 14px; font-weight: 600; }
+        .chat-sub { font-size: 11px; color: #9ca3af; }
+
+        #chatbox {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 2px 4px;
+            font-size: 13px;
+        }
+        .msg { margin-bottom: 10px; line-height: 1.4; }
+        .msg-user { text-align: right; }
+
+        .bubble {
+            display: inline-block;
+            padding: 8px 11px;
+            border-radius: 14px;
+            max-width: 90%;
+        }
+        .bubble-user {
+            background: #1d4ed8;
+            color: #e5e7eb;
+            border-bottom-right-radius: 4px;
+            margin-left: auto;
+        }
+        .bubble-assistant {
+            background: #020617;
+            border: 1px solid rgba(55,65,81,0.9);
+            border-bottom-left-radius: 4px;
+        }
+        .bubble-assistant strong { color: #facc15; }
+
+        .result-item {
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px dashed rgba(55,65,81,0.9);
+            font-size: 12px;
+            color: #e5e7eb;
+        }
+
+        .input-row {
+            margin-top: 6px;
+            display: flex;
+            gap: 8px;
+        }
+        #userInput {
+            flex: 1;
+            padding: 9px 11px;
+            border-radius: 999px;
+            border: 1px solid #374151;
+            background: #020617;
+            color: #e5e7eb;
+            font-size: 13px;
+        }
+        #sendBtn {
+            padding: 0 16px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #3b82f6, #60a5fa);
+            color: #f9fafb;
+            font-weight: 600;
+            font-size: 13px;
         }
     </style>
 </head>
 
-<body class="min-h-screen text-gray-800">
+<body>
+<div class="page">
+    <header>
+        <div class="brand">
+            <div class="brand-logo">P</div>
+            <div class="brand-text">
+                <div class="brand-name">PELEE AI</div>
+                <div class="brand-tagline">Internal Data Tool</div>
+            </div>
+        </div>
+    </header>
 
-    <!-- MAIN CONTAINER -->
-    <div class="max-w-7xl mx-auto py-12 px-4 lg:px-8 flex gap-10">
+    <section class="hero">
+        <div class="hero-copy">
+            <div class="pill">
+                <span class="pill-dot"></span>
+                Internal use only - Not client facing
+            </div>
 
-        <!-- LEFT COLUMN -->
-        <div class="w-80 space-y-6 animate-fade">
+            <h1>Pull <span>hyper-targeted</span> addresses with one prompt.</h1>
+            <p>
+                Ask Pelee for residential or commercial addresses by city, ZIP, street,
+                income bands, home values, or any combination you would use in a campaign.
+            </p>
 
-            <!-- Logo / Title -->
-            <h1 class="text-3xl font-bold text-gray-900">
-                Pelée <span class="text-blue-600">AI</span>
-            </h1>
-            <p class="text-gray-600 -mt-2">AI-powered residential & commercial address discovery.</p>
+            <ul class="hero-bullets">
+                <li>"Strongsville OH homes with incomes over 500k"</li>
+                <li>"Addresses on Heatherwood Ct in Berea OH"</li>
+                <li>"Medina County properties with home values above 800k"</li>
+            </ul>
 
-            <!-- Examples -->
-            <div class="p-4 glass rounded-xl shadow">
-                <h3 class="font-semibold mb-2 text-gray-900">Examples</h3>
-                <ul class="space-y-1 text-sm text-gray-700">
-                    <li>• “Homes in Strongsville OH”</li>
-                    <li>• “Addresses in Pinellas County over 400k value”</li>
-                    <li>• “All buildings in Collier County FL”</li>
-                    <li>• “ZIP 44116 residential addresses”</li>
+            <div class="left-card">
+                <h3>Examples</h3>
+                <ul class="examples-list">
+                    <li>• Homes in Strongsville OH with incomes over 300k</li>
+                    <li>• ZIP 44116 residential addresses</li>
+                    <li>• Addresses in Pinellas County FL over 500k value</li>
+                    <li>• All parcels in Pima County AZ</li>
                 </ul>
-            </div>
 
-            <!-- Searchable Data Fields -->
-            <div class="p-4 glass rounded-xl shadow">
-                <h3 class="font-semibold mb-3 text-gray-900">🔍 Searchable Data Fields</h3>
+                <h3>Searchable Data Fields</h3>
+                <small>(varies by county)</small>
 
-                <table class="w-full text-sm text-gray-700">
-                    <tbody>
-                        <tr><td class="font-medium py-1 pr-2">Address</td><td>Number, Street, Unit</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">City / ZIP</td><td>Full or partial match</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">State</td><td>Two-letter code (e.g., OH)</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">County</td><td>Name or FIPS</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">Census Tract</td><td>GEOID, TRACTCE</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">Land / Water</td><td>ALAND, AWATER</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">Latitude/Longitude</td><td>Point coordinates</td></tr>
-                        <tr><td class="font-medium py-1 pr-2">Bounding Box</td><td>Lat/Lon ranges</td></tr>
-                    </tbody>
+                <table class="fields-table">
+                    <tr>
+                        <td class="fields-table-label">Address</td>
+                        <td>number, street, unit</td>
+                    </tr>
+                    <tr>
+                        <td class="fields-table-label">City/ZIP/State</td>
+                        <td>city, postcode, STUSPS</td>
+                    </tr>
+                    <tr>
+                        <td class="fields-table-label">County</td>
+                        <td>NAME, COUNTYFP</td>
+                    </tr>
+                    <tr>
+                        <td class="fields-table-label">Census Tract</td>
+                        <td>GEOID, TRACTCE</td>
+                    </tr>
+                    <tr>
+                        <td class="fields-table-label">Land/Water</td>
+                        <td>ALAND, AWATER</td>
+                    </tr>
+                    <tr>
+                        <td class="fields-table-label">Coordinates</td>
+                        <td>lat/lon from geometry</td>
+                    </tr>
                 </table>
             </div>
         </div>
 
-        <!-- RIGHT COLUMN -->
-        <div class="flex-1 animate-fade">
-
-            <!-- Search Card -->
-            <div class="glass rounded-xl shadow-lg p-8">
-
-                <h2 class="text-2xl font-semibold text-gray-900 mb-4">Search</h2>
-
-                <!-- Search Form -->
-                <form action="/search" method="POST" class="space-y-6">
-
-                    <!-- Query Input -->
-                    <div>
-                        <label class="block mb-2 font-medium text-gray-800">Enter a query</label>
-                        <input 
-                            type="text" 
-                            name="query"
-                            placeholder="e.g., Homes in Berea OH"
-                            required
-                            class="w-full p-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-
-                    <!-- Buttons -->
-                    <div class="flex gap-4">
-                        <button 
-                            type="submit" 
-                            name="mode" 
-                            value="simple"
-                            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-                        >Simple Search</button>
-
-                        <button 
-                            type="submit" 
-                            name="mode"
-                            value="advanced"
-                            class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-lg"
-                        >Advanced Search</button>
-
-                        <a 
-                            href="/export"
-                            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
-                        >⬇ Export</a>
-                    </div>
-
-                </form>
+        <div class="chat-card">
+            <div class="chat-header">
+                <div>
+                    <div class="chat-title">Pelee Data Chat</div>
+                    <div class="chat-sub">Natural language to filtered address lists</div>
+                </div>
             </div>
 
-            <!-- Results -->
-            {% if results %}
-            <div class="mt-10 glass rounded-xl shadow-lg p-6 overflow-x-auto animate-fade">
-                <h3 class="text-xl font-semibold mb-4">Results</h3>
-
-                <p class="text-sm text-gray-600 mb-3">
-                    Showing {{ results|length }} result(s)
-                </p>
-
-                <table class="min-w-full text-sm">
-                    <thead>
-                        <tr class="text-left border-b">
-                            <th class="py-2 pr-4">Address</th>
-                            <th class="py-2 pr-4">City</th>
-                            <th class="py-2 pr-4">ZIP</th>
-                            <th class="py-2 pr-4">State</th>
-                            <th class="py-2 pr-4">Tract</th>
-                            <th class="py-2 pr-4">Lat</th>
-                            <th class="py-2 pr-4">Lon</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in results %}
-                        <tr class="border-b">
-                            <td class="py-2 pr-4">{{ r.number }} {{ r.street }} {{ r.unit }}</td>
-                            <td class="py-2 pr-4">{{ r.city }}</td>
-                            <td class="py-2 pr-4">{{ r.postcode }}</td>
-                            <td class="py-2 pr-4">{{ r.region }}</td>
-                            <td class="py-2 pr-4">{{ r.GEOID }}</td>
-                            <td class="py-2 pr-4">{{ r.geometry.coordinates[1] }}</td>
-                            <td class="py-2 pr-4">{{ r.geometry.coordinates[0] }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-
+            <div id="chatbox">
+                {% if initial_message %}
+                    <div class="msg">
+                        <div class="bubble bubble-assistant">{{ initial_message }}</div>
+                    </div>
+                {% endif %}
             </div>
-            {% endif %}
 
+            <div class="input-row">
+                <input id="userInput" autocomplete="off" placeholder="Ask for addresses..." />
+                <button id="sendBtn">Send</button>
+            </div>
+
+            <div class="status-row">
+                <div class="status" id="status"></div>
+                <button id="exportBtn" onclick="window.location='/export'">Export</button>
+            </div>
         </div>
-    </div>
+    </section>
+</div>
+
+<script>
+document.getElementById("sendBtn").onclick = async function () {
+    const input = document.getElementById("userInput").value.trim();
+    if (!input) return;
+
+    const chatbox = document.getElementById("chatbox");
+    const status = document.getElementById("status");
+
+    chatbox.innerHTML += `
+        <div class="msg msg-user">
+            <div class="bubble bubble-user">${input}</div>
+        </div>
+    `;
+
+    document.getElementById("userInput").value = "";
+    status.textContent = "Processing...";
+
+    const response = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: input })
+    });
+
+    const data = await response.json();
+    status.textContent = "";
+
+    chatbox.innerHTML += `
+        <div class="msg">
+            <div class="bubble bubble-assistant">${data.reply}</div>
+        </div>
+    `;
+
+    chatbox.scrollTop = chatbox.scrollHeight;
+};
+</script>
 
 </body>
 </html>
