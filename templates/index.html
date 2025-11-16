@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Pelée AI - Data Tool</title>
+    <title>Pelée AI – Data Tool</title>
     <style>
         :root {
             color-scheme: dark;
@@ -135,6 +135,7 @@
             color: #d1d5db;
         }
 
+        /* Searchable fields table */
         .fields-table {
             width: 100%;
             border-collapse: collapse;
@@ -150,7 +151,7 @@
             background: rgba(15,23,42,0.9);
         }
         .fields-table-label {
-            width: 36%;
+            width: 34%;
             color: #e5e7eb;
             font-weight: 500;
         }
@@ -296,7 +297,6 @@
             background: rgba(22,163,74,0.12);
             color: #bbf7d0;
             cursor: pointer;
-            display: none; /* hidden until we have results */
         }
         #exportBtn:hover {
             background: rgba(22,163,74,0.2);
@@ -343,16 +343,16 @@
                 </ul>
 
                 <h3>Searchable Data Fields</h3>
-                <small>(varies by county / dataset)</small>
+                <small>(varies slightly by county / dataset)</small>
                 <table class="fields-table">
                     <tbody>
                     <tr>
                         <td class="fields-table-label">Address</td>
-                        <td>number, street, unit</td>
+                        <td>Number, street, unit</td>
                     </tr>
                     <tr>
                         <td class="fields-table-label">City / ZIP / State</td>
-                        <td>city, postcode / ZIP, region / STUSPS</td>
+                        <td>city, postcode, STUSPS</td>
                     </tr>
                     <tr>
                         <td class="fields-table-label">County</td>
@@ -364,18 +364,18 @@
                     </tr>
                     <tr>
                         <td class="fields-table-label">Land / Water</td>
-                        <td>ALAND (land area), AWATER (water area)</td>
+                        <td>ALAND, AWATER</td>
                     </tr>
                     <tr>
                         <td class="fields-table-label">Coordinates</td>
-                        <td>geometry.coordinates → longitude / latitude</td>
+                        <td>geometry.coordinates</td>
                     </tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- RIGHT SIDE (CHAT) -->
+        <!-- RIGHT SIDE -->
         <div class="chat-card">
             <div class="chat-header">
                 <div>
@@ -385,197 +385,59 @@
             </div>
 
             <div class="chip-row">
-                <div class="chip" onclick="quickPrompt('Give me residential addresses in Strongsville Ohio with incomes over $300k')">
-                    Strongsville > $300k income
-                </div>
-                <div class="chip" onclick="quickPrompt('Give me addresses on Heatherwood Ct in Berea Ohio')">
-                    Heatherwood Ct, Berea
-                </div>
-                <div class="chip" onclick="quickPrompt('Show me residential addresses in Medina County Ohio with home values above $800k')">
-                    Medina > $800k value
-                </div>
+                <div class="chip">Strongsville > $300k income</div>
+                <div class="chip">Heatherwood Ct, Berea</div>
+                <div class="chip">Medina > $800k value</div>
             </div>
 
-            <div id="chatbox"></div>
+            <div id="chatbox">
+                {% if error %}
+                    <div class="msg">
+                        <div class="bubble bubble-assistant">
+                            <strong>Error:</strong> {{ error }}
+                        </div>
+                    </div>
+                {% endif %}
 
-            <div class="input-row">
-                <input
-                    id="userInput"
-                    placeholder="Ask for addresses... e.g. “residential addresses in Vancouver WA with incomes over $100k”"
-                    onkeydown="if(event.key==='Enter'){sendMessage();}"
-                >
-                <button id="sendBtn" onclick="sendMessage()">Send</button>
+                {% if results %}
+                    <div class="msg">
+                        <div class="bubble bubble-assistant">
+                            <strong>{{ results|length }} matches found</strong>
+                            {% for r in results %}
+                                <div class="result-item">
+                                    {{ r.properties.number }} {{ r.properties.street }} {{ r.properties.unit }},
+                                    {{ r.properties.city }}, {{ r.properties.postcode }}
+                                    <br>
+                                    <small>Tract: {{ r.properties.GEOID }}</small>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
             </div>
+
+            <form action="/search" method="POST">
+                <div class="input-row">
+                    <input
+                        id="userInput"
+                        type="text"
+                        name="query"
+                        placeholder="Ask for addresses... e.g. “residential addresses in Vancouver WA with incomes over $100k”"
+                        required
+                    >
+                    <button id="sendBtn">Send</button>
+                </div>
+            </form>
 
             <div class="status-row">
-                <div id="status" class="status"></div>
-                <button id="exportBtn" onclick="exportResults()">⬇ Export</button>
+                <div class="status"></div>
+                <form action="/export" method="GET">
+                    <button id="exportBtn">Export</button>
+                </form>
             </div>
+
         </div>
     </section>
 </div>
-
-<script>
-let lastFilters = null;  // what we sent to /search_advanced last time
-
-function escapeHtml(text) {
-    return (text || "")
-        .toString()
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-}
-
-function appendUser(msg) {
-    const box = document.getElementById("chatbox");
-    box.innerHTML += `
-      <div class="msg msg-user">
-        <div class="bubble bubble-user">${escapeHtml(msg)}</div>
-      </div>`;
-    box.scrollTop = box.scrollHeight;
-}
-
-function appendAssistant(html) {
-    const box = document.getElementById("chatbox");
-    box.innerHTML += `
-      <div class="msg">
-        <div class="bubble bubble-assistant">${html}</div>
-      </div>`;
-    box.scrollTop = box.scrollHeight;
-}
-
-function setStatus(text) {
-    document.getElementById("status").textContent = text || "";
-}
-
-function quickPrompt(text) {
-    const input = document.getElementById("userInput");
-    input.value = text;
-    sendMessage();
-}
-
-async function sendMessage() {
-    const input = document.getElementById("userInput");
-    const text = input.value.trim();
-    if (!text) return;
-
-    input.value = "";
-    appendUser(text);
-    setStatus("Processing…");
-    document.getElementById("exportBtn").style.display = "none";
-
-    try {
-        // 1) Ask backend to parse the natural-language query into filters
-        const parseRes = await fetch("/parse_query", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ query: text })
-        });
-        const parsed = await parseRes.json();
-
-        if (!parsed.ok) {
-            appendAssistant("I couldn't understand that query. " + (parsed.error || ""));
-            setStatus("");
-            return;
-        }
-
-        const filters = parsed.filters || {};
-        lastFilters = filters; // save for export
-
-        // 2) Run advanced search with filters
-        const searchRes = await fetch("/search_advanced", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(filters)
-        });
-        const data = await searchRes.json();
-        setStatus("");
-
-        if (!data.ok) {
-            appendAssistant("Error loading data: " + (data.error || "Unknown error"));
-            return;
-        }
-
-        if (!data.results || data.results.length === 0) {
-            appendAssistant("No matching addresses found.");
-            return;
-        }
-
-        // Enable export button now that we have results
-        document.getElementById("exportBtn").style.display = "inline-block";
-
-        let html = `<strong>${data.count}</strong> results found.<br><br>`;
-        const slice = data.results.slice(0, 40);
-
-        for (const row of slice) {
-            const addr = row.address || "";
-            const city = row.city || "";
-            const state = row.state || "";
-            const zip = row.zip || row.postcode || "";
-            const income = (row.income !== null && row.income !== undefined) ? ` · Income: $${row.income}` : "";
-            const homeVal = (row.home_value !== null && row.home_value !== undefined) ? ` · Home value: $${row.home_value}` : "";
-
-            html += `
-              <div class="result-item">
-                ${escapeHtml(addr)}<br>
-                <small>
-                  ${escapeHtml(city)} ${escapeHtml(state)} ${escapeHtml(zip)}
-                  ${income ? escapeHtml(income) : ""}${homeVal ? escapeHtml(homeVal) : ""}
-                </small>
-              </div>`;
-        }
-
-        if (data.count > slice.length) {
-            html += `<div style="margin-top:6px;color:#9ca3af;font-size:11px;">
-                        Showing first ${slice.length} results.
-                     </div>`;
-        }
-
-        appendAssistant(html);
-
-    } catch (err) {
-        console.error(err);
-        appendAssistant("Unexpected error: " + err);
-        setStatus("");
-    }
-}
-
-async function exportResults() {
-    if (!lastFilters) {
-        appendAssistant("No query to export yet.");
-        return;
-    }
-    try {
-        setStatus("Preparing CSV…");
-        const res = await fetch("/download_csv", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify(lastFilters)
-        });
-
-        if (!res.ok) {
-            setStatus("");
-            appendAssistant("CSV export failed.");
-            return;
-        }
-
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "addresses.csv";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        setStatus("CSV downloaded.");
-        setTimeout(() => setStatus(""), 2000);
-    } catch (err) {
-        console.error(err);
-        appendAssistant("Export error: " + err);
-        setStatus("");
-    }
-}
-</script>
 </body>
 </html>
