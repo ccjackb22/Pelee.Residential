@@ -21,6 +21,7 @@ s3 = boto3.client(
     region_name="us-east-2"
 )
 
+
 # -----------------------------------------------------------
 # LOGIN
 # -----------------------------------------------------------
@@ -72,7 +73,7 @@ def list_state_county_files(state):
     return [
         obj["Key"]
         for obj in objects["Contents"]
-        if obj["Key"].endswith(".geojson")   # FIXED HERE
+        if obj["Key"].endswith(".geojson")
     ]
 
 
@@ -101,6 +102,7 @@ def parse_query(q):
             found_state = abbr
             break
 
+    # numeric filter
     numeric_words = {}
     if "over" in q:
         try:
@@ -109,6 +111,7 @@ def parse_query(q):
         except:
             pass
 
+    # attempt to detect simple city word after "in"
     words = q.replace(",", "").split()
     city = None
     for i, w in enumerate(words):
@@ -121,7 +124,7 @@ def parse_query(q):
 
 
 # -----------------------------------------------------------
-# FILTER GEOJSON FEATURES
+# FILTER GEOJSON FEATURES  (FIXED)
 # -----------------------------------------------------------
 def filter_features(features, city=None, min_value=None):
     results = []
@@ -131,8 +134,13 @@ def filter_features(features, city=None, min_value=None):
         if city and p.get("city", "").lower() != city.lower():
             continue
 
-        if min_value and p.get("income") and p["income"] < min_value:
-            continue
+        # SAFE min_value filtering
+        if min_value:
+            # DP04_0089E = home value
+            # DP03_0062E = household income
+            val = p.get("DP04_0089E") or p.get("DP03_0062E")
+            if isinstance(val, (int, float)) and val < min_value:
+                continue
 
         results.append({
             "number": p.get("number", ""),
