@@ -1,10 +1,10 @@
 import os
 import json
 import boto3
-import re
 from flask import Flask, render_template, request, redirect, session, jsonify
 from botocore.config import Config
 from openai import OpenAI
+import re
 
 # ----------------------------
 # CONFIG
@@ -21,14 +21,19 @@ BUCKET = "residential-data-jack"
 PASSWORD = "CaLuna"
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET", "dev-password")
+app.secret_key = os.environ.get("FLASK_SECRET", "dev-key")
 
 loading_state = {"active": False}
 
+# ----------------------------
+# LOGIN
+# ----------------------------
+@app.before_request
+def require_login():
+    allowed_routes = ["login", "static"]
+    if request.endpoint not in allowed_routes and not session.get("logged_in"):
+        return redirect("/login")
 
-# ----------------------------
-# LOGIN SYSTEM
-# ----------------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -37,29 +42,36 @@ def login():
             return redirect("/")
         else:
             return render_template("login.html", error="Incorrect password")
-
     return render_template("login.html")
 
 
-@app.before_request
-def require_login():
-    allowed = ["login", "static"]
-    if request.endpoint not in allowed and not session.get("logged_in"):
-        return redirect("/login")
+# ----------------------------
+# NORMALIZATION UTIL
+# ----------------------------
+def normalize_county(name):
+    if not name:
+        return ""
+
+    name = name.lower().strip()
+
+    # remove trailing words
+    name = re.sub(r"\b(county|parish|borough|city|census area)\b", "", name).strip()
+
+    # replace spaces
+    name = name.replace(" ", "_")
+
+    return name
 
 
 # ----------------------------
-# GPT QUERY PARSER
+# GPT: QUERY PARSER
 # ----------------------------
 def parse_query(prompt):
     system_msg = (
-        "Convert user real-estate queries into structured filters.\n"
-        "Return JSON ONLY.\n"
-        "Allowed keys: city, state, county, min_income, max_income, "
-        "min_value, max_value, street.\n"
-        "If city is mentioned, output city and state.\n"
-        "If only county is mentioned, output county and state.\n"
-        "NEVER return commentary — JSON only."
+        "Convert the user's natural language real estate request into JSON.\n"
+        "Fields allowed: city, state, county, min_income, max_income, min_value, max_value, street.\n"
+        "Always include state when city mentioned.\n"
+        "Return JSON only."
     )
 
     resp = client.chat.completions.create(
@@ -77,35 +89,7 @@ def parse_query(prompt):
 
 
 # ----------------------------
-# COUNTY NORMALIZER
-# ----------------------------
-def normalize_county(county):
-    if not county:
-        return None
-
-    county = county.lower().strip()
-
-    # Remove suffixes GPT often returns
-    suffixes = [
-        " county",
-        " parish",
-        " borough",
-        " census area",
-        " municipality"
-    ]
-    for suf in suffixes:
-        if county.endswith(suf):
-            county = county.replace(suf, "")
-
-    # Remove punctuation and double spaces
-    county = re.sub(r"[^a-z0-9\s]", "", county)
-    county = re.sub(r"\s+", " ", county)
-
-    return county.strip().replace(" ", "_")
-
-
-# ----------------------------
-# S3 LOADER (VERY ROBUST)
+# LOAD COUNTY FILE FROM S3
 # ----------------------------
 def load_county_file(state, county_name):
     if not state or not county_name:
@@ -114,24 +98,27 @@ def load_county_file(state, county_name):
     state = state.lower()
     base = normalize_county(county_name)
 
-    # Try all combinations
-    possible_names = [
+    # always search both:
+    # cuyahoga
+    # cuyahoga_county
+    variants = list(set([
         base,
         base + "_county",
-        base + "-county",
-        base + "_parish",
-        base + "_borough",
-    ]
+        base.replace("_county", ""),
+        base.replace("_parish", ""),
+        base.replace("_borough", ""),
+    ]))
 
-    file_variants = []
-    for name in possible_names:
-        file_variants.append(f"{state}/{name}-with-values-income.geojson")
-        file_variants.append(f"{state}/{name}.geojson")
+    attempts = []
 
-    # Try each until one succeeds
-    for key in file_variants:
+    for v in variants:
+        attempts.append(f"merged_with_tracts/{state}/{v}-with-values-income.geojson")
+        attempts.append(f"merged_with_tracts/{state}/{v}.geojson")
+
+    # Try S3 keys until one works
+    for key in attempts:
         try:
-            obj = s3.get_object(Bucket=BUCKET, Key="merged_with_tracts/" + key)
+            obj = s3.get_object(Bucket=BUCKET, Key=key)
             return json.loads(obj["Body"].read())
         except:
             continue
@@ -140,28 +127,28 @@ def load_county_file(state, county_name):
 
 
 # ----------------------------
-# FILTER LOGIC
+# FILTER
 # ----------------------------
-def matches(record, f):
-    prop = record.get("properties", {})
+def matches(feature, f):
+    prop = feature.get("properties", {})
 
-    # Street match
+    # street
     if f.get("street"):
         if f["street"].lower() not in prop.get("street", "").lower():
             return False
 
-    # City match
+    # city
     if f.get("city"):
         if f["city"].lower() != prop.get("city", "").lower():
             return False
 
-    # Income
-    if f.get("min_income") and prop.get("DP03_0062E"):
+    # min income
+    if f.get("min_income") and prop.get("DP03_0062E") is not None:
         if prop["DP03_0062E"] < f["min_income"]:
             return False
 
-    # Home value
-    if f.get("min_value") and prop.get("DP04_0089E"):
+    # min value
+    if f.get("min_value") and prop.get("DP04_0089E") is not None:
         if prop["DP04_0089E"] < f["min_value"]:
             return False
 
@@ -189,32 +176,36 @@ def search():
     query = request.form.get("query", "")
     parsed = parse_query(query)
 
-    # Get county automatically when user gives city+state
-    if "city" in parsed and "state" in parsed:
-        lookup = f"City: {parsed['city']}, State: {parsed['state']}\nReturn only the county name."
+    # GPT must always return county
+    if parsed.get("city") and parsed.get("state"):
+        prompt = f"Return ONLY the county name for: {parsed['city']}, {parsed['state']}"
         county_resp = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
-                {"role": "system", "content": "Return ONLY the county name."},
-                {"role": "user", "content": lookup}
+                {"role": "system", "content": "Return county name only. No punctuation."},
+                {"role": "user", "content": prompt}
             ]
         )
         parsed["county"] = county_resp.choices[0].message.content.strip()
 
+    # load dataset
     dataset = load_county_file(parsed.get("state"), parsed.get("county"))
 
     if not dataset:
         loading_state["active"] = False
-        err = f"Dataset not found for {parsed.get('county')}, {parsed.get('state')}."
-        return render_template("index.html", results=[], error=err)
+        return render_template(
+            "index.html",
+            results=None,
+            error=f"Dataset not found for {parsed.get('county')}, {parsed.get('state')}."
+        )
 
-    # Filtering
+    # filter
     results = []
     for feature in dataset.get("features", []):
         if matches(feature, parsed):
             results.append(feature["properties"])
-            if len(results) >= 500:
-                break
+        if len(results) >= 500:
+            break
 
     loading_state["active"] = False
     return render_template("index.html", results=results)
