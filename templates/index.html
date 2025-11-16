@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pelée | AI Address Search</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+  <header>
+    <h1>Pelée | AI Address Search</h1>
+    <p class="tagline">
+      AI-powered residential & commercial address discovery.
+    </p>
+  </header>
+
+  <div class="search-box">
+    <form id="searchForm" onsubmit="return false;">
+      <input id="query" type="text" placeholder='e.g. "addresses in Cleveland Ohio" or "homes in Sarasota built before 2015"' required />
+
+      <div class="controls" style="margin-top:.5rem">
+        <button id="btnSimple" type="button">Simple Search</button>
+        <button id="btnAdvanced" type="button">Advanced Search</button>
+        <button id="exportBtn" type="button">⬇️ Export (Simple)</button>
+        <button id="exportAdvBtn" type="button">⬇️ Export (Advanced)</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="progress"><div id="bar"></div></div>
+
+  <div id="result"></div>
+  <div id="summary"></div>
+
+  <div id="map"></div>
+
+  <pre id="preview"></pre>
+
+  <footer>
+    AI-powered · © <span id="year"></span> Pelée LLC — All rights reserved.
+  </footer>
+
+<script src="/static/script.js"></script>
+</body>
+</html>

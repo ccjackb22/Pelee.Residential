@@ -1,0 +1,151 @@
+/* ---------- GLOBAL ---------- */
+body {
+    font-family: Arial, sans-serif;
+    background:#0d1117;
+    color:#e6edf3;
+    margin:0;
+    text-align:center;
+}
+
+header {
+    padding:1.5rem 1rem;
+}
+
+h1 {
+    margin:0;
+    font-size:2rem;
+}
+
+p.tagline {
+    margin-top:.25rem;
+    color:#8b949e;
+}
+
+/* ---------- SEARCH BAR ---------- */
+.search-box {
+    margin:1.5rem auto;
+    max-width:900px;
+}
+
+input[type="text"] {
+    width: min(900px,90vw);
+    padding:.75rem;
+    border-radius:8px;
+    border:none;
+    outline:none;
+    font-size:1rem;
+    background:#161b22;
+    color:#e6edf3;
+    border:1px solid #30363d;
+}
+
+.controls {
+    display:flex;
+    gap:.5rem;
+    justify-content:center;
+    flex-wrap:wrap;
+}
+
+button {
+    padding:.75rem 1.1rem;
+    border:none;
+    border-radius:8px;
+    background:#1f6feb;
+    color:#fff;
+    cursor:pointer;
+    font-size:1rem;
+}
+
+button:hover {
+    background:#388bfd;
+}
+
+#btnSimple {
+    background:#6e7681;
+}
+#btnSimple:hover {
+    background:#8b949e;
+}
+
+#exportBtn,
+#exportAdvBtn {
+    display:none;
+    background:#238636;
+}
+#exportBtn:hover,
+#exportAdvBtn:hover {
+    background:#2ea043;
+}
+
+/* ---------- PROGRESS BAR ---------- */
+#progress {
+    width:80%;
+    max-width:600px;
+    height:6px;
+    background:#30363d;
+    margin:10px auto;
+    border-radius:4px;
+    overflow:hidden;
+    display:none;
+}
+
+#bar {
+    height:6px;
+    width:0%;
+    background:#1f6feb;
+    transition:width .4s ease;
+}
+
+/* ---------- RESULTS ---------- */
+#result {
+    margin-top:1rem;
+    font-size:1rem;
+    color:#e6edf3;
+    font-weight:500;
+}
+
+#summary {
+    display:none;
+    max-width:900px;
+    margin:.5rem auto 1.2rem;
+    background:rgba(56,139,253,.08);
+    border:1px solid #1f6feb33;
+    border-radius:8px;
+    padding:.75rem 1rem;
+    font-size:.95rem;
+    color:#8b949e;
+    font-style:italic;
+}
+
+/* ---------- MAP ---------- */
+#map {
+    height:420px;
+    width:90%;
+    max-width:1200px;
+    margin:1.25rem auto;
+    border-radius:10px;
+    overflow:hidden;
+    border:1px solid #30363d;
+}
+
+/* ---------- PREVIEW PANEL ---------- */
+pre {
+    background:#161b22;
+    color:#e6edf3;
+    padding:1rem;
+    border-radius:10px;
+    width:90%;
+    max-width:1200px;
+    margin:1rem auto;
+    text-align:left;
+    overflow-x:auto;
+    font-size:.85rem;
+    border:1px solid #30363d;
+}
+
+/* ---------- FOOTER ---------- */
+footer {
+    margin:2rem 0 1rem;
+    font-size:.85rem;
+    color:#8b949e;
+}
