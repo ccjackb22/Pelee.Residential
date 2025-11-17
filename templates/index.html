@@ -19,7 +19,7 @@
 
         .page { max-width: 1150px; margin: 0 auto; padding: 32px 20px 40px; }
 
-        /* HEADER */
+        /* ----- HEADER ----- */
         .brand { display: flex; align-items: center; gap: 10px; }
         .brand-logo {
             width: 32px; height: 32px; border-radius: 999px;
@@ -28,97 +28,98 @@
             font-weight: 800; font-size: 18px; color: #020617;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
-        .brand-name {
-            font-size: 12px;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-        }
+        .brand-name { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
 
-        /* LAYOUT */
+        /* ----- LAYOUT ----- */
         .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .left-card {
-            background: rgba(15,23,42,0.9);
-            padding: 14px;
-            border-radius: 14px;
-            border: 1px solid #334155;
-        }
+        .left-card { background: rgba(15,23,42,0.9); padding: 14px; border-radius: 14px; border: 1px solid #334155; }
 
-        /* CHAT CARD */
+        /* ----- CHAT UI ----- */
         .chat-card {
-            height: 520px;
-            display: flex;
-            flex-direction: column;
+            height: 480px; display: flex; flex-direction: column;
             background: rgba(15,23,42,0.95);
-            border-radius: 20px;
-            padding: 18px;
+            border-radius: 20px; padding: 18px;
             border: 1px solid rgba(148,163,184,0.35);
         }
-
         #chatbox { flex: 1; overflow-y: auto; padding: 8px 4px; font-size: 13px; }
-
-        .result-item {
-            border-bottom: 1px solid #334155;
-            padding: 6px 0;
-            font-size: 12px;
+        .msg { margin-bottom: 10px; }
+        .bubble {
+            display: inline-block; padding: 8px 11px; border-radius: 14px;
+            max-width: 85%; line-height: 1.4;
+        }
+        .bubble-assistant {
+            background: #020617; color: #e5e7eb;
+            border: 1px solid #334155; border-bottom-left-radius: 4px;
         }
 
-        .input-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
+        /* Input Row */
+        .input-row { display: flex; gap: 10px; margin-top: 10px; }
         #userInput {
-            flex: 1;
-            padding: 10px;
-            border-radius: 10px;
-            border: 1px solid #475569;
-            background: #0f172a;
-            color: white;
+            flex: 1; padding: 10px; border-radius: 10px;
+            border: 1px solid #475569; background: #0f172a; color: white;
+        }
+        #sendBtn {
+            padding: 0 16px; border-radius: 10px;
+            background: #3b82f6; border: none; color: white; cursor: pointer;
         }
 
-        #sendBtn,
-        #clearBtn,
-        #exportBtn {
-            padding: 0 16px;
-            border-radius: 10px;
-            background: #3b82f6;
-            border: none;
-            color: white;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        #clearBtn { background: #ef4444; }
-        #exportBtn { background: #22c55e; }
-
-        #top-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 8px;
-        }
-
+        /* Loading bar */
         #loadingBar {
-            width: 100%;
-            height: 4px;
+            width: 100%; height: 4px;
             background: rgba(255,255,255,0.15);
-            margin-bottom: 8px;
-            overflow: hidden;
-            border-radius: 4px;
-            display: none;
+            margin-top: 8px; overflow: hidden;
+            border-radius: 4px; display: none;
         }
-
         #loadingBar div {
-            width: 0%;
-            height: 100%;
-            background: #3b82f6;
+            width: 0%; height: 100%; background: #3b82f6;
             animation: loadAnim 1.2s infinite linear;
         }
-
         @keyframes loadAnim {
             0% { width: 0%; }
             50% { width: 80%; }
             100% { width: 0%; }
+        }
+
+        /* Results */
+        .result-item {
+            border-top: 1px solid #334155;
+            padding: 8px 0;
+            font-size: 12px;
+        }
+        .result-main {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .result-address {
+            font-weight: 500;
+        }
+        .result-unit {
+            font-size: 11px;
+            color: #9ca3af;
+            min-width: 90px;
+            text-align: right;
+        }
+
+        .actions-row {
+            margin-top: 8px;
+            display: flex;
+            gap: 10px;
+            font-size: 12px;
+        }
+        .link-button {
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid #4ade80;
+            color: #bbf7d0;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .link-button.secondary {
+            border-color: #64748b;
+            color: #cbd5f5;
         }
     </style>
 </head>
@@ -130,24 +131,27 @@
             <div class="brand-logo">P</div>
             <div>
                 <div class="brand-name">PELÉE AI</div>
-                <div style="font-size:13px;color:#9ca3af;">Address Intelligence Tool</div>
+                <div style="font-size:13px;color:#9ca3af;">Internal Data Tool</div>
             </div>
         </div>
     </header>
 
+    <!-- MAIN GRID -->
     <section class="hero">
 
-        <!-- LEFT SIDE -->
+        <!-- LEFT: TEXT + EXAMPLES -->
         <div>
-            <h1 style="font-size:28px;margin:0 0 12px;">
-                Pull <span style="color:#facc15;">high-value</span> addresses instantly.
-            </h1>
-            <p style="color:#9ca3af;">
-                Search by city, ZIP, street, income band, home values, or neighborhood name.
-            </p>
+            <h1 style="font-size:28px;margin:0 0 12px;">Pull <span style="color:#facc15;">hyper-targeted</span> addresses with one prompt.</h1>
+            <p style="color:#9ca3af;">Ask Pelée for residential or commercial addresses by city, ZIP, street, income bands, home values, and more.</p>
+
+            <ul style="font-size:13px;color:#9ca3af; margin-bottom:18px;">
+                <li>“Strongsville, OH homes with incomes over $500k.”</li>
+                <li>“Addresses on Heatherwood Ct in Berea, OH.”</li>
+                <li>“Medina County properties above $800k.”</li>
+            </ul>
 
             <div class="left-card">
-                <h3 style="margin-top:0;">Examples</h3>
+                <h3>Examples</h3>
                 <ul style="font-size:12px;margin:0 0 10px;padding-left:16px;">
                     <li>• Homes in Strongsville OH with incomes over $300k</li>
                     <li>• ZIP 44116 residential addresses</li>
@@ -155,42 +159,61 @@
                     <li>• All parcels in Pima County AZ</li>
                 </ul>
 
-                <h3>Included Data Fields</h3>
-                <p style="font-size:12px;color:#9ca3af;">
-                    Address, Unit, City, ZIP, State, Income, Home Value, Coordinates, Census Tract, County
-                </p>
+                <h3>Searchable Data Fields</h3>
+                <table style="font-size:11px;width:100%;margin-top:6px;">
+                    <tr><td>Address</td><td>number, street, unit</td></tr>
+                    <tr><td>City / ZIP / State</td><td>city, postcode, region/STUSPS</td></tr>
+                    <tr><td>County</td><td>NAME, COUNTYFP, NAMELSADCO</td></tr>
+                    <tr><td>Census Tract</td><td>GEOID, GEOIDFQ, TRACTCE</td></tr>
+                    <tr><td>Land / Water</td><td>ALAND, AWATER</td></tr>
+                    <tr><td>Coordinates</td><td>geometry.coordinates</td></tr>
+                    <tr><td>Value & Income</td><td>Attached home value & household income metrics where available</td></tr>
+                </table>
             </div>
         </div>
 
-        <!-- RIGHT SIDE: CHAT -->
+        <!-- RIGHT: CHAT UI -->
         <div>
             <div class="chat-card">
-
-                <div style="font-size:14px;font-weight:600; margin-bottom:6px;">
-                    Pelée Data Chat
-                </div>
+                <div style="font-size:14px;font-weight:600; margin-bottom:6px;">Pelée Data Chat</div>
                 <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">
-                    Ask for any group of addresses
+                    Ask for any group of addresses.
                 </div>
 
                 <div id="loadingBar"><div></div></div>
 
                 <div id="chatbox">
                     {% if error %}
-                        <div class="bubble bubble-assistant" style="margin-bottom:8px;color:#f87171;">
-                            Error: {{ error }}
+                        <div class="msg">
+                            <div class="bubble bubble-assistant">
+                                Error: {{ error }}
+                            </div>
                         </div>
                     {% endif %}
 
                     {% if results %}
-                        <div class="bubble bubble-assistant" style="margin-bottom:8px;">
-                            <strong>{{ results|length }}</strong> address(es) found.
+                        <div class="msg">
+                            <div class="bubble bubble-assistant">
+                                <strong>{{ results|length }}</strong> address(es) found for this search.
+                            </div>
                         </div>
 
                         {% for r in results %}
                             <div class="result-item">
-                                {{ r.number }} {{ r.street }} {{ r.unit }}<br>
-                                <small>{{ r.city }}, {{ r.region }} {{ r.postcode }}</small>
+                                <div class="result-main">
+                                    <div class="result-address">
+                                        {{ r.number }} {{ r.street }}
+                                        <br>
+                                        <small>{{ r.city }}, {{ r.region }} {{ r.postcode }}</small>
+                                    </div>
+                                    <div class="result-unit">
+                                        {% if r.unit %}
+                                            Unit {{ r.unit }}
+                                        {% else %}
+                                            &nbsp;
+                                        {% endif %}
+                                    </div>
+                                </div>
                             </div>
                         {% endfor %}
                     {% endif %}
@@ -198,16 +221,19 @@
 
                 <form id="chatForm" method="POST" action="/search" class="input-row">
                     <input id="userInput" name="query"
-                           placeholder='e.g. "homes in strongsville ohio"'
+                           placeholder='Ask for addresses… e.g. “residential addresses in Strongsville Ohio with incomes over $300k”'
                            required>
-                    <button id="sendBtn">Search</button>
+                    <button id="sendBtn">Send</button>
                 </form>
 
-                <div id="top-buttons">
-                    <a id="clearBtn" href="/clear">Clear</a>
-                    <a id="exportBtn" href="/export">Export</a>
+                <div class="actions-row">
+                    <a href="/export" class="link-button">
+                        <span>⬇️ Export list</span>
+                    </a>
+                    <a href="/clear" class="link-button secondary">
+                        ✕ Clear
+                    </a>
                 </div>
-
             </div>
         </div>
 
@@ -215,6 +241,7 @@
 </div>
 
 <script>
+    // simple loading bar toggle
     const form = document.getElementById("chatForm");
     const loadingBar = document.getElementById("loadingBar");
 
