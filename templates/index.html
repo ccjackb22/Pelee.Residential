@@ -19,7 +19,6 @@
 
         .page { max-width: 1150px; margin: 0 auto; padding: 32px 20px 40px; }
 
-        /* ----- HEADER ----- */
         .brand { display: flex; align-items: center; gap: 10px; }
         .brand-logo {
             width: 32px; height: 32px; border-radius: 999px;
@@ -30,7 +29,6 @@
         }
         .brand-name { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
 
-        /* ----- LAYOUT ----- */
         .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         .left-card {
             background: rgba(15,23,42,0.9);
@@ -39,7 +37,6 @@
             border: 1px solid #334155;
         }
 
-        /* ----- CHAT UI ----- */
         .chat-card {
             height: 480px; display: flex; flex-direction: column;
             background: rgba(15,23,42,0.95);
@@ -57,7 +54,6 @@
             border: 1px solid #334155; border-bottom-left-radius: 4px;
         }
 
-        /* Input Row */
         .input-row { display: flex; gap: 10px; margin-top: 10px; }
         #userInput {
             flex: 1; padding: 10px; border-radius: 10px;
@@ -68,7 +64,6 @@
             background: #3b82f6; border: none; color: white; cursor: pointer;
         }
 
-        /* Loading bar */
         #loadingBar {
             width: 100%; height: 4px;
             background: rgba(255,255,255,0.15);
@@ -85,7 +80,6 @@
             100% { width: 0%; }
         }
 
-        /* Results */
         .result-item { border-top: 1px solid #334155; padding: 8px 0; font-size: 12px; }
 
         .export-row {
@@ -119,10 +113,8 @@
         </div>
     </header>
 
-    <!-- MAIN GRID -->
     <section class="hero">
 
-        <!-- LEFT: TEXT + EXAMPLES -->
         <div>
             <h1 style="font-size:28px;margin:0 0 12px;">
                 Pull <span style="color:#facc15;">hyper-targeted</span> addresses with one prompt.
@@ -132,18 +124,18 @@
             </p>
 
             <ul style="font-size:13px;color:#9ca3af; margin-bottom:18px;">
-                <li>“Strongsville, OH homes with incomes over $500k.”</li>
-                <li>“Addresses on Heatherwood Ct in Berea, OH.”</li>
-                <li>“Medina County properties above $800k.”</li>
+                <li>“Palo Alto CA homes with incomes over $500k.”</li>
+                <li>“Addresses on Middlefield Rd in Palo Alto CA.”</li>
+                <li>“Santa Clara County properties above $2M.”</li>
             </ul>
 
             <div class="left-card">
                 <h3>Examples</h3>
                 <ul style="font-size:12px;margin:0 0 10px;padding-left:16px;">
-                    <li>• Homes in Strongsville OH with incomes over $300k</li>
-                    <li>• ZIP 44116 residential addresses</li>
-                    <li>• Addresses in Pinellas County FL over $500k value</li>
-                    <li>• All parcels in Pima County AZ</li>
+                    <li>• Homes in Palo Alto CA with incomes over $300k</li>
+                    <li>• ZIP 94301 residential addresses</li>
+                    <li>• Addresses in Santa Clara County CA over $2M value</li>
+                    <li>• All parcels in San Mateo County CA</li>
                 </ul>
 
                 <h3>Searchable Data Fields</h3>
@@ -159,7 +151,6 @@
             </div>
         </div>
 
-        <!-- RIGHT: CHAT UI -->
         <div>
             <div class="chat-card">
                 <div style="font-size:14px;font-weight:600; margin-bottom:4px;">Pelée Data Chat</div>
@@ -168,7 +159,7 @@
                     <br>
                     <span style="font-size:11px;color:#6b7280;">
                         For most states, include the county (e.g. “in king county washington”).
-                        Ohio city-only queries (Strongsville, Westlake, etc.) will use Cuyahoga by default.
+                        Ohio city-only queries will use Cuyahoga by default.
                     </span>
                 </div>
 
@@ -199,7 +190,7 @@
 
                 <form id="chatForm" method="POST" action="/search" class="input-row">
                     <input id="userInput" name="query"
-                           placeholder='Ask for addresses… e.g. “homes in strongsville ohio with incomes over 300k”'
+                           placeholder='Ask for addresses… e.g. “homes in palo alto california with incomes over 300k”'
                            required>
                     <button id="sendBtn" type="submit">Send</button>
                 </form>
@@ -220,7 +211,6 @@
 </div>
 
 <script>
-    // simple loading bar toggle
     const form = document.getElementById("chatForm");
     const loadingBar = document.getElementById("loadingBar");
 
