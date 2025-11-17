@@ -25,7 +25,9 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
-PASSWORD = os.getenv("ACCESS_PASSWORD", "CaLuna")
+
+# ✅ FIXED PASSWORD — ONLY CHANGE IN THIS FILE
+PASSWORD = "Pel33!"   # <--- SET YOUR PASSWORD HERE
 
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
@@ -63,10 +65,9 @@ STATE_NAMES = {
 
 STATE_ABBRS = {abbr.lower(): abbr for abbr in STATE_NAMES.values()}
 
-# DEMO dataset — Cuyahoga only
+# Demo dataset (Cuyahoga)
 OH_CUYAHOGA_DATASET = "merged_with_tracts/oh/cuyahoga-with-values-income.geojson"
 
-# All Ohio cities map to Cuyahoga in demo mode
 OH_CITY_TO_DATASET = {
     "strongsville": OH_CUYAHOGA_DATASET,
     "westlake": OH_CUYAHOGA_DATASET,
@@ -101,12 +102,6 @@ def load_geojson_from_s3(key: str) -> dict | None:
 # QUERY PARSING
 # -----------------------------------------------------------
 def parse_basic_query(q: str):
-    """
-    Detects:
-      - state
-      - city (after “in”)
-      - county (not used yet)
-    """
     q = (q or "").strip()
     q_lower = q.lower()
     tokens = re.split(r"[,\s]+", q_lower)
@@ -115,18 +110,13 @@ def parse_basic_query(q: str):
     county = None
     city = None
 
-    # ----------------------------------------
-    # 1) FULL NAME STATE MATCH FIRST (OHIO)
-    # ----------------------------------------
+    # Full-name state detection
     for name, abbr in STATE_NAMES.items():
         if re.search(r"\b" + re.escape(name) + r"\b", q_lower):
             state_abbr = abbr
             break
 
-    # ----------------------------------------
-    # 2) ABBREVIATION DETECTION — ONLY IF
-    #    no full-name match was found
-    # ----------------------------------------
+    # Abbreviation detection only if no state found
     skip_words = {
         "in", "me", "my", "give", "get", "show", "find", "for", "to", "of",
         "the", "a", "home", "homes", "house", "houses", "addresses", "address",
@@ -141,9 +131,7 @@ def parse_basic_query(q: str):
                 state_abbr = STATE_ABBRS[tok]
                 break
 
-    # ----------------------------------------
-    # 3) CITY DETECTION
-    # ----------------------------------------
+    # city detection
     for i, w in enumerate(tokens):
         if w in ("in", "near", "around", "at"):
             if i + 1 < len(tokens):
@@ -158,7 +146,6 @@ def _parse_number_token(tok: str) -> float | None:
     if not tok:
         return None
     cleaned = tok.replace("$", "").replace(",", "").strip()
-
     multiplier = 1
     if cleaned.lower().endswith("k"):
         multiplier = 1000
@@ -166,7 +153,6 @@ def _parse_number_token(tok: str) -> float | None:
     elif cleaned.lower().endswith("m"):
         multiplier = 1_000_000
         cleaned = cleaned[:-1]
-
     try:
         return float(cleaned) * multiplier
     except:
@@ -228,12 +214,10 @@ def filter_features(features, city=None, min_home_value=None, min_income=None,
     for f in features:
         props = f.get("properties", {}) or {}
 
-        # city filter
         if city_norm:
             if str(props.get("city", "")).lower() != city_norm:
                 continue
 
-        # income filter
         if min_income is not None:
             inc = _get_numeric_from_props(
                 props,
@@ -242,7 +226,6 @@ def filter_features(features, city=None, min_home_value=None, min_income=None,
             if inc is None or inc < min_income:
                 continue
 
-        # home value filter
         if min_home_value is not None:
             val = _get_numeric_from_props(
                 props,
@@ -326,12 +309,10 @@ def search():
         return render_template("index.html",
                                error="Couldn't detect a state. Try 'addresses in strongsville ohio'.")
 
-    # DEMO: OHIO ONLY
     if state_abbr != "OH":
         return render_template("index.html",
                                error="Right now this demo is wired to Cuyahoga County, Ohio only.")
 
-    # City mapping
     if city and city in OH_CITY_TO_DATASET:
         dataset_key = OH_CITY_TO_DATASET[city]
     else:
@@ -398,12 +379,10 @@ def export():
         return render_template("index.html",
                                error="No results to export.")
 
-    # Collect all property keys
     all_prop_keys = set()
     for item in export_features:
         all_prop_keys.update(item["properties"].keys())
 
-    # Base column mapping
     base_map = {
         "number": "Address Number",
         "street": "Street",
