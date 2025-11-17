@@ -81,45 +81,16 @@
         }
 
         /* Results */
-        .result-item {
-            border-top: 1px solid #334155;
-            padding: 8px 0;
-            font-size: 12px;
-        }
-        .result-main {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-        }
-        .result-address {
-            font-weight: 500;
-        }
-        .result-unit {
-            font-size: 11px;
-            color: #9ca3af;
-            min-width: 90px;
-            text-align: right;
-        }
+        .result-item { border-top: 1px solid #334155; padding: 8px 0; font-size: 12px; }
 
         .actions-row {
-            margin-top: 8px;
             display: flex;
-            gap: 10px;
+            gap: 14px;
+            margin-top: 8px;
             font-size: 12px;
         }
-        .link-button {
-            padding: 4px 10px;
-            border-radius: 999px;
-            border: 1px solid #4ade80;
-            color: #bbf7d0;
+        .actions-row a {
             text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-        .link-button.secondary {
-            border-color: #64748b;
-            color: #cbd5f5;
         }
     </style>
 </head>
@@ -141,8 +112,12 @@
 
         <!-- LEFT: TEXT + EXAMPLES -->
         <div>
-            <h1 style="font-size:28px;margin:0 0 12px;">Pull <span style="color:#facc15;">hyper-targeted</span> addresses with one prompt.</h1>
-            <p style="color:#9ca3af;">Ask Pelée for residential or commercial addresses by city, ZIP, street, income bands, home values, and more.</p>
+            <h1 style="font-size:28px;margin:0 0 12px;">
+                Pull <span style="color:#facc15;">hyper-targeted</span> addresses with one prompt.
+            </h1>
+            <p style="color:#9ca3af;">
+                Ask Pelée for residential or commercial addresses by city, ZIP, street, income bands, home values, and more.
+            </p>
 
             <ul style="font-size:13px;color:#9ca3af; margin-bottom:18px;">
                 <li>“Strongsville, OH homes with incomes over $500k.”</li>
@@ -167,8 +142,12 @@
                     <tr><td>Census Tract</td><td>GEOID, GEOIDFQ, TRACTCE</td></tr>
                     <tr><td>Land / Water</td><td>ALAND, AWATER</td></tr>
                     <tr><td>Coordinates</td><td>geometry.coordinates</td></tr>
-                    <tr><td>Value & Income</td><td>Attached home value & household income metrics where available</td></tr>
+                    <tr><td>Value &amp; Income</td><td>Attached home value &amp; household income metrics where available</td></tr>
                 </table>
+
+                <p style="font-size:11px;color:#9ca3af;margin-top:10px;">
+                    Current demo coverage: Cuyahoga County, OH pilot. Additional states and counties are being added.
+                </p>
             </div>
         </div>
 
@@ -185,35 +164,24 @@
                 <div id="chatbox">
                     {% if error %}
                         <div class="msg">
-                            <div class="bubble bubble-assistant">
-                                Error: {{ error }}
-                            </div>
+                            <div class="bubble bubble-assistant">Error: {{ error }}</div>
                         </div>
                     {% endif %}
 
                     {% if results %}
                         <div class="msg">
                             <div class="bubble bubble-assistant">
-                                <strong>{{ results|length }}</strong> address(es) found for this search.
+                                <strong>{{ results|length }}</strong> address(es) found.
+                                <div style="font-size:11px;color:#9ca3af;margin-top:4px;">
+                                    Showing a preview. Use Export to download a CSV with full data fields.
+                                </div>
                             </div>
                         </div>
 
                         {% for r in results %}
                             <div class="result-item">
-                                <div class="result-main">
-                                    <div class="result-address">
-                                        {{ r.number }} {{ r.street }}
-                                        <br>
-                                        <small>{{ r.city }}, {{ r.region }} {{ r.postcode }}</small>
-                                    </div>
-                                    <div class="result-unit">
-                                        {% if r.unit %}
-                                            Unit {{ r.unit }}
-                                        {% else %}
-                                            &nbsp;
-                                        {% endif %}
-                                    </div>
-                                </div>
+                                {{ r.number }} {{ r.street }}{% if r.unit %} {{ r.unit }}{% endif %}<br>
+                                <small>{{ r.city }}, {{ r.region }} {{ r.postcode }}</small>
                             </div>
                         {% endfor %}
                     {% endif %}
@@ -221,18 +189,14 @@
 
                 <form id="chatForm" method="POST" action="/search" class="input-row">
                     <input id="userInput" name="query"
-                           placeholder='Ask for addresses… e.g. “residential addresses in Strongsville Ohio with incomes over $300k”'
+                           placeholder='Ask for addresses… e.g. “addresses in strongsville ohio with incomes over 300k”'
                            required>
                     <button id="sendBtn">Send</button>
                 </form>
 
                 <div class="actions-row">
-                    <a href="/export" class="link-button">
-                        <span>⬇️ Export list</span>
-                    </a>
-                    <a href="/clear" class="link-button secondary">
-                        ✕ Clear
-                    </a>
+                    <a href="/export" style="color:#bbf7d0;">Export</a>
+                    <a href="/clear" style="color:#fecaca;">Clear</a>
                 </div>
             </div>
         </div>
