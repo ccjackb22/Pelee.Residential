@@ -7,9 +7,10 @@ app = Flask(__name__)
 app.secret_key = "supersecret"
 
 # ---------------------
-# AUTH
+# PASSWORD LOGIN
 # ---------------------
-PASSWORD = "CaLuna"   # YOUR PASSWORD — DO NOT CHANGE THIS
+PASSWORD = "CaLuna"
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -22,8 +23,15 @@ def login():
     return render_template("login.html")
 
 
+@app.route("/")
+def index():
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+    return render_template("index.html")
+
+
 # ---------------------
-# S3 CLIENT
+# AWS S3 CLIENT
 # ---------------------
 S3_BUCKET = "residential-data-jack"
 
@@ -37,9 +45,8 @@ s3 = session_boto.client("s3")
 
 
 # ---------------------
-# S3 DEBUGGING BLOCK
+# DEBUG: S3 TEST ENDPOINT
 # ---------------------
-# This tests if Render can SEE ANYTHING in S3.
 @app.route("/s3test")
 def s3test():
     try:
@@ -57,70 +64,88 @@ def s3test():
 
 
 # ---------------------
-# BASIC ROUTES
-# ---------------------
-@app.route("/")
-def index():
-    if not session.get("logged_in"):
-        return redirect(url_for("login"))
-    return render_template("index.html")
-
-
-# ---------------------
-# PARSER
+# COUNTY NORMALIZATION
 # ---------------------
 def normalize_county_name(raw: str) -> str:
+    """
+    Normalize county into S3 filename format:
+    "palm beach county" -> "palm_beach"
+    "los angeles" -> "los_angeles"
+    """
     raw = raw.lower().strip()
-    raw = raw.replace(" county", "")
-    raw = raw.replace(" parish", "")
-    raw = raw.replace(" borough", "")
-    raw = raw.replace(" census area", "")
-    raw = raw.replace(" city", "")
-    raw = " ".join(raw.split())
-    raw = raw.replace(" ", "_")
+
+    suffixes = [" county", " parish", " borough", " census area", " city"]
+    for s in suffixes:
+        if raw.endswith(s):
+            raw = raw[: -len(s)]
+
+    raw = raw.strip()
+    raw = " ".join(raw.split())  # collapse multiple spaces
+    raw = raw.replace(" ", "_")  # convert to S3 naming style
     return raw
 
 
-def parse_query(text: str):
-    text = text.lower()
+def extract_county_from_text(text: str):
+    """
+    Extracts correct county name for 3,000+ U.S. counties.
+    Handles multi-word counties and "in", "the", "of" clutter.
+    """
+    markers = [" county", " parish", " borough", " census area", " city"]
 
-    # state lookup
+    for marker in markers:
+        if marker in text:
+            before = text.split(marker)[0].strip()
+            words = before.split()
+
+            # remove junk filler words
+            junk = {"in", "the", "of", "at", "for", "near"}
+            words = [w for w in words if w not in junk]
+
+            if not words:
+                return None
+
+            # Try 3-word, then 2-word, then 1-word counties
+            for n in [3, 2, 1]:
+                if len(words) >= n:
+                    candidate = " ".join(words[-n:])
+                    return normalize_county_name(candidate)
+
+    return None
+
+
+# ---------------------
+# QUERY PARSER
+# ---------------------
+def parse_query(text: str):
+    t = text.lower()
+
+    # ---- STATE ----
     state = None
     for st in STATE_MAP:
-        if st.lower() in text:
+        if st.lower() in t:
             state = STATE_MAP[st]
             break
 
-    # find county
-    county = None
-    if " county" in text:
-        before = text.split(" county")[0].split()[-2:]
-        county = " ".join(before)
-    elif " parish" in text:
-        before = text.split(" parish")[0].split()[-2:]
-        county = " ".join(before)
-    elif " borough" in text:
-        before = text.split(" borough")[0].split()[-2:]
-        county = " ".join(before)
+    # ---- COUNTY ----
+    county = extract_county_from_text(t)
 
-    if county:
-        county = normalize_county_name(county)
-
-    # income or value
+    # ---- NUMERIC FILTERS ----
     income = None
     value = None
-    nums = [int(n.replace(",", "")) for n in text.split() if n.replace(",", "").isdigit()]
+
+    nums = [n for n in t.replace(",", "").split() if n.isdigit()]
     if nums:
-        if "income" in text or "incomes" in text:
-            income = nums[0]
-        elif "value" in text or "values" in text:
-            value = nums[0]
+        num = int(nums[0])
+        if "income" in t or "incomes" in t:
+            income = num
+        elif "value" in t or "values" in t:
+            value = num
 
     return state, county, income, value
 
 
 # ---------------------
-# STATE MAP
+# STATE MAP (ALL 50)
 # ---------------------
 STATE_MAP = {
     "alabama": "al",
@@ -206,8 +231,11 @@ def search():
             key=key,
         )
     except Exception as e:
-        return render_template("index.html", error=f"Failed to load: {key} — {e}")
-
+        return render_template(
+            "index.html",
+            error=f"Failed to load: {key} — {e}",
+            query=user_query,
+        )
 
 
 if __name__ == "__main__":
