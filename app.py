@@ -1,153 +1,51 @@
 import os
+import io
 import json
+import csv
+import zipfile
+from functools import lru_cache
+
+from flask import (
+    Flask,
+    render_template,
+    request,
+    jsonify,
+    redirect,
+    url_for,
+    session,
+    send_file,
+)
 import boto3
-from flask import Flask, render_template, request, redirect, url_for, session
+from botocore.exceptions import ClientError
+from dotenv import load_dotenv
+
+# ----------------- CONFIG -----------------
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
+PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
+
+AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-2"))
+S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
+S3_PREFIX = "merged_with_tracts"
+
+MAX_RESULTS = 500  # how many addresses to show in UI
 
 app = Flask(__name__)
-app.secret_key = "supersecret"
+app.secret_key = SECRET_KEY
 
-# ---------------------
-# PASSWORD LOGIN
-# ---------------------
-PASSWORD = "CaLuna"
+s3_client = boto3.client("s3", region_name=AWS_REGION)
 
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        pw = request.form.get("password", "").strip()
-        if pw == PASSWORD:
-            session["logged_in"] = True
-            return redirect(url_for("index"))
-        return render_template("login.html", error="Wrong password.")
-    return render_template("login.html")
+# simple in-memory cache of S3 keys per state
+_STATE_KEYS_CACHE = {}
 
 
-@app.route("/")
-def index():
-    if not session.get("logged_in"):
-        return redirect(url_for("login"))
-    return render_template("index.html")
+# ----------------- UTILITIES -----------------
 
 
-# ---------------------
-# AWS S3 CLIENT
-# ---------------------
-S3_BUCKET = "residential-data-jack"
-
-session_boto = boto3.session.Session(
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION", "us-east-2"),
-)
-
-s3 = session_boto.client("s3")
-
-
-# ---------------------
-# DEBUG: S3 TEST ENDPOINT
-# ---------------------
-@app.route("/s3test")
-def s3test():
-    try:
-        listing = s3.list_objects_v2(
-            Bucket=S3_BUCKET,
-            Prefix="merged_with_tracts/tx/"
-        )
-        return {
-            "status": "OK",
-            "found": listing.get("KeyCount", 0),
-            "keys": [obj.get("Key") for obj in listing.get("Contents", [])]
-        }
-    except Exception as e:
-        return {"status": "ERROR", "message": str(e)}
-
-
-# ---------------------
-# COUNTY NORMALIZATION
-# ---------------------
-def normalize_county_name(raw: str) -> str:
-    """
-    Normalize county into S3 filename format:
-    "palm beach county" -> "palm_beach"
-    "los angeles" -> "los_angeles"
-    """
-    raw = raw.lower().strip()
-
-    suffixes = [" county", " parish", " borough", " census area", " city"]
-    for s in suffixes:
-        if raw.endswith(s):
-            raw = raw[: -len(s)]
-
-    raw = raw.strip()
-    raw = " ".join(raw.split())  # collapse multiple spaces
-    raw = raw.replace(" ", "_")  # convert to S3 naming style
-    return raw
-
-
-def extract_county_from_text(text: str):
-    """
-    Extracts correct county name for 3,000+ U.S. counties.
-    Handles multi-word counties and "in", "the", "of" clutter.
-    """
-    markers = [" county", " parish", " borough", " census area", " city"]
-
-    for marker in markers:
-        if marker in text:
-            before = text.split(marker)[0].strip()
-            words = before.split()
-
-            # remove junk filler words
-            junk = {"in", "the", "of", "at", "for", "near"}
-            words = [w for w in words if w not in junk]
-
-            if not words:
-                return None
-
-            # Try 3-word, then 2-word, then 1-word counties
-            for n in [3, 2, 1]:
-                if len(words) >= n:
-                    candidate = " ".join(words[-n:])
-                    return normalize_county_name(candidate)
-
-    return None
-
-
-# ---------------------
-# QUERY PARSER
-# ---------------------
-def parse_query(text: str):
-    t = text.lower()
-
-    # ---- STATE ----
-    state = None
-    for st in STATE_MAP:
-        if st.lower() in t:
-            state = STATE_MAP[st]
-            break
-
-    # ---- COUNTY ----
-    county = extract_county_from_text(t)
-
-    # ---- NUMERIC FILTERS ----
-    income = None
-    value = None
-
-    nums = [n for n in t.replace(",", "").split() if n.isdigit()]
-    if nums:
-        num = int(nums[0])
-        if "income" in t or "incomes" in t:
-            income = num
-        elif "value" in t or "values" in t:
-            value = num
-
-    return state, county, income, value
-
-
-# ---------------------
-# STATE MAP (ALL 50)
-# ---------------------
-STATE_MAP = {
+US_STATES = {
+    # full name -> code
     "alabama": "al",
     "alaska": "ak",
     "arizona": "az",
@@ -200,43 +98,498 @@ STATE_MAP = {
     "wyoming": "wy",
 }
 
+STATE_CODES = {v: v for v in US_STATES.values()}
 
-# ---------------------
-# SEARCH ROUTE
-# ---------------------
+
+def normalize_text(s: str) -> str:
+    return " ".join(s.strip().lower().split())
+
+
+def canonicalize_county_name(name: str) -> str:
+    """
+    Make county names comparable:
+    - lowercase
+    - replace '_' and '-' with spaces
+    - remove 'county' / 'parish'
+    """
+    if not name:
+        return ""
+    s = name.lower().replace("_", " ").replace("-", " ")
+    for word in [" county", " parish"]:
+        if word in s:
+            s = s.replace(word, "")
+    return " ".join(s.split())
+
+
+def detect_state(query: str):
+    q = query.lower()
+    tokens = q.split()
+
+    # 1) look for 2-letter codes
+    for t in tokens:
+        t_clean = t.strip(",.")
+        if t_clean in STATE_CODES:
+            return STATE_CODES[t_clean].upper()
+
+    # 2) look for full names (including multi-word like "new york")
+    for name, code in US_STATES.items():
+        if name in q:
+            return code.upper()
+
+    return None
+
+
+def parse_location(query: str):
+    """
+    Parse state + county + city from a free-form query.
+
+    Priority:
+    - if 'county' present → extract county tokens before 'county'
+    - else if looks like 'city, state' or 'in city state' → treat as city
+    """
+    q = normalize_text(query)
+    tokens = q.split()
+
+    state = detect_state(q)
+    county = None
+    city = None
+
+    # county pattern "... X Y county STATE ..."
+    if "county" in tokens:
+        idxs = [i for i, t in enumerate(tokens) if t == "county"]
+        # just use first 'county' occurrence
+        idx = idxs[0]
+        j = idx - 1
+        county_tokens_rev = []
+        STOP = {"in", "of", "all", "any", "properties", "homes", "households", "residential", "addresses", "parcels"}
+        while j >= 0:
+            t = tokens[j]
+            if t in STOP:
+                break
+            # don't cross state name
+            if t.upper() in STATE_CODES or t in US_STATES:
+                break
+            county_tokens_rev.append(t)
+            j -= 1
+        county_tokens = list(reversed(county_tokens_rev))
+        if county_tokens:
+            county = " ".join(county_tokens)
+
+    # If no county but we have Ohio city-only query → default to Cuyahoga
+    if not county and state == "OH":
+        # crude city extraction: last token before state / code
+        if state:
+            # find index of state token
+            state_idx = None
+            for i, t in enumerate(tokens):
+                if (t in STATE_CODES) or (t in US_STATES):
+                    state_idx = i
+                    break
+            if state_idx is not None and state_idx > 0:
+                # walk backwards until stopword
+                j = state_idx - 1
+                city_tokens_rev = []
+                STOP = {"in", "ohio", "oh"}
+                while j >= 0 and tokens[j] not in STOP:
+                    city_tokens_rev.append(tokens[j])
+                    j -= 1
+                city_tokens = list(reversed(city_tokens_rev))
+                if city_tokens:
+                    city = " ".join(city_tokens)
+        # default county for OH city-only queries
+        county = "cuyahoga"
+
+    return state, county, city
+
+
+def parse_numeric_filters(query: str):
+    """
+    Extract simple 'over X' / 'above X' for incomes or values.
+
+    We'll check words around 'income' or 'value' but keep it simple.
+    """
+    q = query.lower()
+    income_min = None
+    value_min = None
+
+    # crude: look for 'over' or 'above' followed by a number with optional k/m
+    tokens = q.replace("$", "").replace(",", "").split()
+    for i, t in enumerate(tokens):
+        if t in {"over", "above"} and i + 1 < len(tokens):
+            raw = tokens[i + 1]
+            # strip trailing punctuation
+            raw = raw.strip(".,)")
+            mult = 1.0
+            if raw.endswith("k"):
+                mult = 1_000
+                raw = raw[:-1]
+            elif raw.endswith("m"):
+                mult = 1_000_000
+                raw = raw[:-1]
+            try:
+                num = float(raw) * mult
+            except ValueError:
+                continue
+
+            # if the word 'income' appears nearby, treat as income filter
+            window = " ".join(tokens[max(0, i - 3): i + 6])
+            if "income" in window or "household" in window:
+                income_min = num
+            elif "value" in window or "home" in window or "homes" in window or "properties" in window:
+                value_min = num
+            else:
+                # fallback: if we don't see context, treat as income
+                if income_min is None:
+                    income_min = num
+
+    return income_min, value_min
+
+
+def list_state_keys(state_code: str):
+    """
+    Cache + return all keys under merged_with_tracts/{state_code}/
+    """
+    state_code = state_code.lower()
+    if state_code in _STATE_KEYS_CACHE:
+        return _STATE_KEYS_CACHE[state_code]
+
+    prefix = f"{S3_PREFIX}/{state_code}/"
+    keys = []
+    continuation = None
+
+    while True:
+        try:
+            if continuation:
+                resp = s3_client.list_objects_v2(
+                    Bucket=S3_BUCKET,
+                    Prefix=prefix,
+                    ContinuationToken=continuation,
+                )
+            else:
+                resp = s3_client.list_objects_v2(
+                    Bucket=S3_BUCKET,
+                    Prefix=prefix,
+                )
+        except ClientError as e:
+            app.logger.error(f"[S3] list_objects_v2 failed for state={state_code}: {e}")
+            break
+
+        contents = resp.get("Contents", [])
+        for obj in contents:
+            key = obj.get("Key")
+            if key and key.endswith(".geojson"):
+                keys.append(key)
+
+        if resp.get("IsTruncated"):
+            continuation = resp.get("NextContinuationToken")
+        else:
+            break
+
+    _STATE_KEYS_CACHE[state_code] = keys
+    app.logger.info(f"[S3] Cached {len(keys)} keys for state={state_code}")
+    return keys
+
+
+def resolve_dataset_key(state: str, county: str):
+    """
+    Given a state code (e.g. 'FL') and county name (e.g. 'Palm Beach'),
+    pick the best matching S3 key.
+
+    Preference order:
+    1) exact county match + '-with-values-income'
+    2) exact county match + '.geojson'
+    3) fuzzy (starts/contains) with '-with-values-income'
+    4) fuzzy with '.geojson'
+    """
+    if not state or not county:
+        return None
+
+    state_code = state.lower()
+    county_clean = canonicalize_county_name(county)
+
+    keys = list_state_keys(state_code)
+    if not keys:
+        return None
+
+    enriched_exact = []
+    raw_exact = []
+    enriched_fuzzy = []
+    raw_fuzzy = []
+
+    for key in keys:
+        # key like 'merged_with_tracts/fl/palm_beach_county-with-values-income.geojson'
+        fname = key.split("/")[-1]
+        if not fname.endswith(".geojson"):
+            continue
+        base = fname[:-len(".geojson")]  # strip .geojson
+        has_values = "with-values-income" in base
+        # strip suffix
+        base_no_suffix = base.replace("-with-values-income", "")
+        base_canon = canonicalize_county_name(base_no_suffix)
+
+        if not base_canon:
+            continue
+
+        if base_canon == county_clean:
+            if has_values:
+                enriched_exact.append(key)
+            else:
+                raw_exact.append(key)
+        elif base_canon.startswith(county_clean) or county_clean.startswith(base_canon):
+            if has_values:
+                enriched_fuzzy.append(key)
+            else:
+                raw_fuzzy.append(key)
+
+    # pick best bucket
+    for bucket in (enriched_exact, raw_exact, enriched_fuzzy, raw_fuzzy):
+        if bucket:
+            # shortest filename is usually cleanest
+            return sorted(bucket, key=len)[0]
+
+    return None
+
+
+def load_geojson_from_s3(key: str):
+    try:
+        resp = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+        body = resp["Body"].read()
+        return json.loads(body)
+    except ClientError as e:
+        app.logger.error(f"[S3] get_object failed for {key}: {e}")
+        raise
+
+
+def filter_features(features, income_min=None, value_min=None):
+    """
+    Filter features by optional 'median_income' / 'median_value' fields (or similar).
+    We'll look for several possible property names.
+    """
+    if income_min is None and value_min is None:
+        return features
+
+    income_keys = ["DP03_0062E", "median_income", "income", "household_income"]
+    value_keys = ["DP04_0089E", "median_value", "home_value", "value"]
+
+    def get_first(props, keys):
+        for k in keys:
+            if k in props and props[k] not in (None, ""):
+                try:
+                    return float(props[k])
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    filtered = []
+    for feat in features:
+        props = feat.get("properties", {})
+        keep = True
+
+        if income_min is not None:
+            inc = get_first(props, income_keys)
+            if inc is None or inc < income_min:
+                keep = False
+
+        if keep and value_min is not None:
+            val = get_first(props, value_keys)
+            if val is None or val < value_min:
+                keep = False
+
+        if keep:
+            filtered.append(feat)
+
+    return filtered
+
+
+def feature_to_address_line(feat):
+    props = feat.get("properties", {})
+    number = props.get("number") or props.get("house_number") or ""
+    street = props.get("street") or props.get("road") or ""
+    unit = props.get("unit") or ""
+    city = props.get("city") or ""
+    postcode = props.get("postcode") or ""
+    region = props.get("region") or props.get("STUSPS") or ""
+
+    parts = []
+    line1 = " ".join(str(x).strip() for x in [number, street, unit] if x)
+    if line1:
+        parts.append(line1)
+    loc = ", ".join(p for p in [city, region, postcode] if p)
+    if loc:
+        parts.append(loc)
+    return "\n".join(parts) if parts else "(no address)"
+
+
+# ----------------- ROUTES -----------------
+
+
+@app.route("/health")
+def health():
+    return jsonify({"ok": True})
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        if pw == PASSWORD:
+            session["authed"] = True
+            return redirect(url_for("index"))
+        return render_template("login.html", error="Invalid password.")
+    return render_template("login.html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
+@app.route("/")
+def index():
+    if not session.get("authed"):
+        return redirect(url_for("login"))
+    return render_template("index.html")
+
+
 @app.route("/search", methods=["POST"])
 def search():
-    if not session.get("logged_in"):
-        return redirect(url_for("login"))
+    if not session.get("authed"):
+        return jsonify({"error": "Unauthorized"}), 401
 
-    user_query = request.form.get("query", "").strip()
-    if not user_query:
-        return render_template("index.html", error="Empty query")
+    query = request.form.get("query", "") or request.json.get("query", "")
+    query = query.strip()
+    app.logger.debug(f"/search query={query!r}")
 
-    state, county, income, value = parse_query(user_query)
+    if not query:
+        return jsonify({"error": "Please enter a query."})
 
-    if not state or not county:
-        return render_template("index.html", error="Could not understand query")
+    state, county, city = parse_location(query)
+    income_min, value_min = parse_numeric_filters(query)
 
-    key = f"merged_with_tracts/{state}/{county}-with-values-income.geojson"
+    app.logger.debug(f"parse_location → state={state}, county={county}, city={city}")
+    app.logger.debug(f"parse_numeric_filters → income_min={income_min}, value_min={value_min}")
+
+    if not state:
+        return jsonify({"error": "Could not detect a state in your query."})
+
+    if not county:
+        return jsonify({"error": "Could not detect a county in your query."})
+
+    key = resolve_dataset_key(state, county)
+    app.logger.debug(f"resolve_dataset_key → key={key}")
+
+    if not key:
+        return jsonify(
+            {
+                "error": f"Failed to find a dataset for {county.title()} County, {state}. "
+                         f"(No matching file name in S3.)"
+            }
+        )
 
     try:
-        obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
-        data = json.loads(obj["Body"].read())
-        return render_template(
-            "index.html",
-            results=data.get("features", []),
-            query=user_query,
-            count=len(data.get("features", [])),
-            key=key,
-        )
+        gj = load_geojson_from_s3(key)
     except Exception as e:
-        return render_template(
-            "index.html",
-            error=f"Failed to load: {key} — {e}",
-            query=user_query,
+        return jsonify(
+            {
+                "error": f"Failed to load: {key} — {str(e)}"
+            }
         )
 
+    features = gj.get("features", [])
+    app.logger.debug(f"Loaded {len(features)} features from {key}")
+
+    features = filter_features(features, income_min=income_min, value_min=value_min)
+    total = len(features)
+    features = features[:MAX_RESULTS]
+
+    addresses = [feature_to_address_line(f) for f in features]
+
+    return jsonify(
+        {
+            "ok": True,
+            "query": query,
+            "state": state,
+            "county": county,
+            "dataset_key": key,
+            "total": total,
+            "shown": len(addresses),
+            "results": addresses,
+        }
+    )
+
+
+@app.route("/export", methods=["POST"])
+def export():
+    """
+    Export matching features as zipped CSV.
+    Expects 'query' in form/json, same parser as /search.
+    """
+    if not session.get("authed"):
+        return jsonify({"error": "Unauthorized"}), 401
+
+    query = request.form.get("query", "") or request.json.get("query", "")
+    query = query.strip()
+    if not query:
+        return jsonify({"error": "Missing query for export."}), 400
+
+    state, county, city = parse_location(query)
+    income_min, value_min = parse_numeric_filters(query)
+
+    if not state or not county:
+        return jsonify({"error": "Need a recognisable state and county to export."}), 400
+
+    key = resolve_dataset_key(state, county)
+    if not key:
+        return jsonify({"error": f"Failed to find dataset for export for {county.title()} County, {state}."}), 400
+
+    try:
+        gj = load_geojson_from_s3(key)
+    except Exception as e:
+        return jsonify({"error": f"Failed to load dataset for export: {str(e)}"}), 500
+
+    features = gj.get("features", [])
+    features = filter_features(features, income_min=income_min, value_min=value_min)
+
+    # flatten to CSV rows
+    rows = []
+    fieldnames = set()
+
+    for feat in features:
+        props = feat.get("properties", {}).copy()
+        geom = feat.get("geometry") or {}
+        coords = geom.get("coordinates")
+        if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+            props["lon"] = coords[0]
+            props["lat"] = coords[1]
+        fieldnames.update(props.keys())
+        rows.append(props)
+
+    fieldnames = sorted(fieldnames)
+
+    # write CSV into in-memory zip
+    memfile = io.BytesIO()
+    with zipfile.ZipFile(memfile, "w", zipfile.ZIP_DEFLATED) as zf:
+        csv_buf = io.StringIO()
+        writer = csv.DictWriter(csv_buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+        zf.writestr("addresses.csv", csv_buf.getvalue())
+
+    memfile.seek(0)
+    filename = f"pelee_export_{state}_{canonicalize_county_name(county).replace(' ', '_')}.zip"
+
+    return send_file(
+        memfile,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+# ----------------- MAIN -----------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)
