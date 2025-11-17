@@ -32,7 +32,12 @@
 
         /* ----- LAYOUT ----- */
         .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .left-card { background: rgba(15,23,42,0.9); padding: 14px; border-radius: 14px; border: 1px solid #334155; }
+        .left-card {
+            background: rgba(15,23,42,0.9);
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid #334155;
+        }
 
         /* ----- CHAT UI ----- */
         .chat-card {
@@ -83,14 +88,21 @@
         /* Results */
         .result-item { border-top: 1px solid #334155; padding: 8px 0; font-size: 12px; }
 
-        .actions-row {
-            display: flex;
-            gap: 14px;
+        .export-row {
             margin-top: 8px;
             font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #9ca3af;
         }
-        .actions-row a {
+        .export-row a {
+            color: #bbf7d0;
             text-decoration: none;
+            margin-left: 12px;
+        }
+        .export-row a:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -144,19 +156,20 @@
                     <tr><td>Coordinates</td><td>geometry.coordinates</td></tr>
                     <tr><td>Value &amp; Income</td><td>Attached home value &amp; household income metrics where available</td></tr>
                 </table>
-
-                <p style="font-size:11px;color:#9ca3af;margin-top:10px;">
-                    Current demo coverage: Cuyahoga County, OH pilot. Additional states and counties are being added.
-                </p>
             </div>
         </div>
 
         <!-- RIGHT: CHAT UI -->
         <div>
             <div class="chat-card">
-                <div style="font-size:14px;font-weight:600; margin-bottom:6px;">Pelée Data Chat</div>
-                <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">
+                <div style="font-size:14px;font-weight:600; margin-bottom:4px;">Pelée Data Chat</div>
+                <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">
                     Ask for any group of addresses.
+                    <br>
+                    <span style="font-size:11px;color:#6b7280;">
+                        For most states, include the county (e.g. “in king county washington”).
+                        Ohio city-only queries (Strongsville, Westlake, etc.) will use Cuyahoga by default.
+                    </span>
                 </div>
 
                 <div id="loadingBar"><div></div></div>
@@ -172,15 +185,12 @@
                         <div class="msg">
                             <div class="bubble bubble-assistant">
                                 <strong>{{ results|length }}</strong> address(es) found.
-                                <div style="font-size:11px;color:#9ca3af;margin-top:4px;">
-                                    Showing a preview. Use Export to download a CSV with full data fields.
-                                </div>
                             </div>
                         </div>
 
                         {% for r in results %}
                             <div class="result-item">
-                                {{ r.number }} {{ r.street }}{% if r.unit %} {{ r.unit }}{% endif %}<br>
+                                {{ r.number }} {{ r.street }} {{ r.unit }}<br>
                                 <small>{{ r.city }}, {{ r.region }} {{ r.postcode }}</small>
                             </div>
                         {% endfor %}
@@ -189,14 +199,19 @@
 
                 <form id="chatForm" method="POST" action="/search" class="input-row">
                     <input id="userInput" name="query"
-                           placeholder='Ask for addresses… e.g. “addresses in strongsville ohio with incomes over 300k”'
+                           placeholder='Ask for addresses… e.g. “homes in strongsville ohio with incomes over 300k”'
                            required>
-                    <button id="sendBtn">Send</button>
+                    <button id="sendBtn" type="submit">Send</button>
                 </form>
 
-                <div class="actions-row">
-                    <a href="/export" style="color:#bbf7d0;">Export</a>
-                    <a href="/clear" style="color:#fecaca;">Clear</a>
+                <div class="export-row">
+                    <span>
+                        Export the current result set as a zipped CSV with address, income, value, and all available fields.
+                    </span>
+                    <span>
+                        <a href="/export">Export</a>
+                        <a href="/clear">Clear</a>
+                    </span>
                 </div>
             </div>
         </div>
