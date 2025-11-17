@@ -26,8 +26,8 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
 
-# LOGIN PASSWORD (as requested)
-PASSWORD = "CaLuna"
+# Password: uses env if set, otherwise "CaLuna"
+PASSWORD = os.getenv("ACCESS_PASSWORD", "CaLuna")
 
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
@@ -65,10 +65,10 @@ STATE_NAMES = {
 
 STATE_ABBRS = {abbr.lower(): abbr for abbr in STATE_NAMES.values()}
 
-# Demo baseline (still valid, just not the only thing anymore)
+# Ohio baseline dataset (still valid, just not the only one anymore)
 OH_CUYAHOGA_DATASET = "merged_with_tracts/oh/cuyahoga-with-values-income.geojson"
 
-# Special-case mapping for Ohio city-only queries
+# Special-case mapping for Ohio city-only queries → Cuyahoga file
 OH_CITY_TO_DATASET = {
     "strongsville": OH_CUYAHOGA_DATASET,
     "westlake": OH_CUYAHOGA_DATASET,
@@ -109,10 +109,55 @@ def slugify_county_name(county: str) -> str:
     c = county.lower().strip()
     # remove trailing "county" if still present
     c = re.sub(r"\bcounty\b", "", c).strip()
-    # replace any non-letter/digit with underscore
+    # replace non-alphanumeric with underscores
     c = re.sub(r"[^a-z0-9]+", "_", c)
     c = re.sub(r"_+", "_", c).strip("_")
     return c
+
+
+# -----------------------------------------------------------
+# COUNTY PARSER (THIS WAS THE BROKEN PIECE)
+# -----------------------------------------------------------
+def extract_county_name(q_lower: str) -> str | None:
+    """
+    Bulletproof: walk backwards from the word 'county' and collect
+    the actual county name tokens, ignoring junk like 'addresses', 'homes', etc.
+
+    Example:
+      'addresses in alameda county california' → 'alameda'
+      'residential properties in palm beach county fl' → 'palm beach'
+      'homes in santa clara county california' → 'santa clara'
+    """
+    tokens = q_lower.split()
+    if "county" not in tokens:
+        return None
+
+    idx = tokens.index("county")
+
+    STOPWORDS = {
+        "in", "the", "of", "and", "for", "to", "all", "any",
+        "addresses", "address", "homes", "home", "houses",
+        "parcels", "properties", "residential", "commercial",
+        "data", "with", "over", "above",
+    }
+
+    county_tokens = []
+    i = idx - 1
+    while i >= 0:
+        w = tokens[i]
+        if w in STOPWORDS:
+            break
+        # accept alphabetic or alphabetic+dot tokens (st., etc.)
+        if not re.match(r"^[a-z\.]+$", w):
+            break
+        county_tokens.append(w)
+        i -= 1
+
+    if not county_tokens:
+        return None
+
+    county_tokens.reverse()
+    return " ".join(county_tokens)
 
 
 def resolve_dataset_key(state_abbr: str | None, county: str | None, city: str | None) -> str | None:
@@ -120,6 +165,7 @@ def resolve_dataset_key(state_abbr: str | None, county: str | None, city: str | 
     Decide which S3 key to hit based on:
       - Ohio city shortcuts
       - Explicit county + state
+    Pattern: merged_with_tracts/{state}/{county}-with-values-income.geojson
     """
     if not state_abbr:
         return None
@@ -131,7 +177,9 @@ def resolve_dataset_key(state_abbr: str | None, county: str | None, city: str | 
     if state_abbr == "OH" and city:
         c = city.lower()
         if c in OH_CITY_TO_DATASET:
-            return OH_CITY_TO_DATASET[c]
+            key = OH_CITY_TO_DATASET[c]
+            print(f"[DEBUG] resolve_dataset_key → OH city shortcut key={key}")
+            return key
 
     # 2) Explicit COUNTY + state: merged_with_tracts/{state}/{county}-with-values-income.geojson
     if county:
@@ -141,7 +189,7 @@ def resolve_dataset_key(state_abbr: str | None, county: str | None, city: str | 
             print(f"[DEBUG] resolve_dataset_key → county-based key={key}")
             return key
 
-    # 3) Fallback: if nothing matched, return None
+    # 3) Fallback: none
     print("[DEBUG] resolve_dataset_key → no key resolved")
     return None
 
@@ -154,14 +202,13 @@ def parse_basic_query(q: str):
     Detect:
       - state_abbr: e.g. 'CA'
       - county: e.g. 'santa clara'
-      - city: after 'in/near/around'
+      - city: first token after 'in/near/around/at'
     """
     q = (q or "").strip()
     q_lower = q.lower()
     tokens = re.split(r"[,\s]+", q_lower)
 
     state_abbr = None
-    county = None
     city = None
 
     # --- FULL-NAME STATE DETECTION ---
@@ -170,14 +217,14 @@ def parse_basic_query(q: str):
             state_abbr = abbr
             break
 
-    # --- ABBREVIATION DETECTION (only if full name not found) ---
-    skip_words = {
-        "in", "me", "my", "give", "get", "show", "find", "for", "to", "of",
-        "the", "a", "home", "homes", "house", "houses", "addresses", "address",
-        "residential", "commercial", "properties", "property",
-    }
-
+    # --- ABBREVIATION DETECTION (CA, FL, OH, etc.) ---
     if state_abbr is None:
+        skip_words = {
+            "in", "me", "my", "give", "get", "show", "find", "for", "to",
+            "of", "the", "a", "an", "on", "at", "near", "around",
+            "homes", "home", "houses", "addresses", "address",
+            "residential", "commercial", "properties", "property",
+        }
         for tok in tokens:
             if tok in skip_words:
                 continue
@@ -185,19 +232,17 @@ def parse_basic_query(q: str):
                 state_abbr = STATE_ABBRS[tok]
                 break
 
-    # --- COUNTY DETECTION: "santa clara county", "pinellas county" ---
-    m = re.search(r"\b([a-z\s]+?)\s+county\b", q_lower)
-    if m:
-        county_raw = m.group(1).strip()
-        # strip leading "in", "the", etc.
-        county_raw = re.sub(r"^(in|the)\s+", "", county_raw).strip()
-        county = county_raw or None
+    # --- COUNTY via backwards scanner ---
+    county = extract_county_name(q_lower)
 
     # --- CITY DETECTION (word after in/near/around/at) ---
     for i, w in enumerate(tokens):
         if w in ("in", "near", "around", "at"):
             if i + 1 < len(tokens):
-                city = tokens[i + 1]
+                nxt = tokens[i + 1]
+                if nxt in ("the",):
+                    continue
+                city = nxt
                 break
 
     print(f"[DEBUG] parse_basic_query → state={state_abbr}, county={county}, city={city}")
@@ -240,7 +285,7 @@ def parse_numeric_filters(q: str):
         elif has_value and not has_income:
             min_home_value = numeric_val
         elif has_income and has_value:
-            # if both mentioned, lean toward income; value filters still supported separately
+            # if both mentioned, lean toward income
             min_income = numeric_val
 
     print(f"[DEBUG] parse_numeric_filters → value={min_home_value}, income={min_income}")
@@ -374,16 +419,14 @@ def search():
     if not state_abbr:
         return render_template(
             "index.html",
-            error="Couldn't detect a state. Try 'addresses in palo alto california' or 'addresses in santa clara county california'."
+            error="Couldn't detect a state. Try 'addresses in santa clara county california'."
         )
 
-    # Resolve which dataset to hit
     dataset_key = resolve_dataset_key(state_abbr, county, city)
     if not dataset_key:
-        # For non-Ohio states, we currently require county to be specified
         return render_template(
             "index.html",
-            error="Couldn't detect a target county/dataset. For now, include a county, e.g. 'in santa clara county california'."
+            error="Couldn't detect a target county/dataset. For now, include a county like 'in santa clara county california', or use an Ohio city like Strongsville."
         )
 
     data = load_geojson_from_s3(dataset_key)
@@ -427,7 +470,7 @@ def search():
 @app.route("/export")
 def export():
     if not session.get("logged_in"):
-        return render_template("login.html")
+        return redirect("/login")
 
     meta = session.get("last_query_meta")
     if not meta:
