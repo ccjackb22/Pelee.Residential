@@ -19,7 +19,7 @@
 
         .page { max-width: 1150px; margin: 0 auto; padding: 32px 20px 40px; }
 
-        /* ----- HEADER ----- */
+        /* HEADER */
         .brand { display: flex; align-items: center; gap: 10px; }
         .brand-logo {
             width: 32px; height: 32px; border-radius: 999px;
@@ -28,64 +28,98 @@
             font-weight: 800; font-size: 18px; color: #020617;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
-        .brand-name { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
+        .brand-name {
+            font-size: 12px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
 
-        /* ----- LAYOUT ----- */
+        /* LAYOUT */
         .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .left-card { background: rgba(15,23,42,0.9); padding: 14px; border-radius: 14px; border: 1px solid #334155; }
+        .left-card {
+            background: rgba(15,23,42,0.9);
+            padding: 14px;
+            border-radius: 14px;
+            border: 1px solid #334155;
+        }
 
-        /* ----- CHAT UI ----- */
+        /* CHAT CARD */
         .chat-card {
-            height: 480px; display: flex; flex-direction: column;
+            height: 520px;
+            display: flex;
+            flex-direction: column;
             background: rgba(15,23,42,0.95);
-            border-radius: 20px; padding: 18px;
+            border-radius: 20px;
+            padding: 18px;
             border: 1px solid rgba(148,163,184,0.35);
         }
+
         #chatbox { flex: 1; overflow-y: auto; padding: 8px 4px; font-size: 13px; }
-        .msg { margin-bottom: 10px; }
-        .bubble {
-            display: inline-block; padding: 8px 11px; border-radius: 14px;
-            max-width: 85%; line-height: 1.4;
-        }
-        .bubble-user {
-            background: #1d4ed8; color: #e5e7eb;
-            margin-left: auto; border-bottom-right-radius: 4px;
-        }
-        .bubble-assistant {
-            background: #020617; color: #e5e7eb;
-            border: 1px solid #334155; border-bottom-left-radius: 4px;
+
+        .result-item {
+            border-bottom: 1px solid #334155;
+            padding: 6px 0;
+            font-size: 12px;
         }
 
-        /* Input Row */
-        .input-row { display: flex; gap: 10px; margin-top: 10px; }
+        .input-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
         #userInput {
-            flex: 1; padding: 10px; border-radius: 10px;
-            border: 1px solid #475569; background: #0f172a; color: white;
-        }
-        #sendBtn {
-            padding: 0 16px; border-radius: 10px;
-            background: #3b82f6; border: none; color: white; cursor: pointer;
+            flex: 1;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #475569;
+            background: #0f172a;
+            color: white;
         }
 
-        /* Loading bar */
-        #loadingBar {
-            width: 100%; height: 4px;
-            background: rgba(255,255,255,0.15);
-            margin-top: 8px; overflow: hidden;
-            border-radius: 4px; display: none;
+        #sendBtn,
+        #clearBtn,
+        #exportBtn {
+            padding: 0 16px;
+            border-radius: 10px;
+            background: #3b82f6;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 12px;
         }
+
+        #clearBtn { background: #ef4444; }
+        #exportBtn { background: #22c55e; }
+
+        #top-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        #loadingBar {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.15);
+            margin-bottom: 8px;
+            overflow: hidden;
+            border-radius: 4px;
+            display: none;
+        }
+
         #loadingBar div {
-            width: 0%; height: 100%; background: #3b82f6;
+            width: 0%;
+            height: 100%;
+            background: #3b82f6;
             animation: loadAnim 1.2s infinite linear;
         }
+
         @keyframes loadAnim {
             0% { width: 0%; }
             50% { width: 80%; }
             100% { width: 0%; }
         }
-
-        /* Results */
-        .result-item { border-top: 1px solid #334155; padding: 8px 0; font-size: 12px; }
     </style>
 </head>
 
@@ -96,27 +130,24 @@
             <div class="brand-logo">P</div>
             <div>
                 <div class="brand-name">PELÉE AI</div>
-                <div style="font-size:13px;color:#9ca3af;">Internal Data Tool</div>
+                <div style="font-size:13px;color:#9ca3af;">Address Intelligence Tool</div>
             </div>
         </div>
     </header>
 
-    <!-- MAIN GRID -->
     <section class="hero">
 
-        <!-- LEFT: TEXT + EXAMPLES -->
+        <!-- LEFT SIDE -->
         <div>
-            <h1 style="font-size:28px;margin:0 0 12px;">Pull <span style="color:#facc15;">hyper-targeted</span> addresses with one prompt.</h1>
-            <p style="color:#9ca3af;">Ask Pelée for residential or commercial addresses by city, ZIP, street, income bands, home values, etc.</p>
-
-            <ul style="font-size:13px;color:#9ca3af; margin-bottom:18px;">
-                <li>“Strongsville, OH homes with incomes over $500k.”</li>
-                <li>“Addresses on Heatherwood Ct in Berea, OH.”</li>
-                <li>“Medina County properties above $800k.”</li>
-            </ul>
+            <h1 style="font-size:28px;margin:0 0 12px;">
+                Pull <span style="color:#facc15;">high-value</span> addresses instantly.
+            </h1>
+            <p style="color:#9ca3af;">
+                Search by city, ZIP, street, income band, home values, or neighborhood name.
+            </p>
 
             <div class="left-card">
-                <h3>Examples</h3>
+                <h3 style="margin-top:0;">Examples</h3>
                 <ul style="font-size:12px;margin:0 0 10px;padding-left:16px;">
                     <li>• Homes in Strongsville OH with incomes over $300k</li>
                     <li>• ZIP 44116 residential addresses</li>
@@ -124,35 +155,37 @@
                     <li>• All parcels in Pima County AZ</li>
                 </ul>
 
-                <h3>Searchable Data Fields</h3>
-                <table style="font-size:11px;width:100%;margin-top:6px;">
-                    <tr><td>Address</td><td>number, street, unit</td></tr>
-                    <tr><td>City / ZIP / State</td><td>city, postcode, region/STUSPS</td></tr>
-                    <tr><td>County</td><td>NAME, COUNTYFP, NAMELSADCO</td></tr>
-                    <tr><td>Census Tract</td><td>GEOID, GEOIDFQ, TRACTCE</td></tr>
-                    <tr><td>Land / Water</td><td>ALAND, AWATER</td></tr>
-                    <tr><td>Coordinates</td><td>geometry.coordinates</td></tr>
-                </table>
+                <h3>Included Data Fields</h3>
+                <p style="font-size:12px;color:#9ca3af;">
+                    Address, Unit, City, ZIP, State, Income, Home Value, Coordinates, Census Tract, County
+                </p>
             </div>
         </div>
 
-        <!-- RIGHT: CHAT UI -->
+        <!-- RIGHT SIDE: CHAT -->
         <div>
             <div class="chat-card">
-                <div style="font-size:14px;font-weight:600; margin-bottom:6px;">Pelée Data Chat</div>
-                <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">Natural language → filtered address lists</div>
+
+                <div style="font-size:14px;font-weight:600; margin-bottom:6px;">
+                    Pelée Data Chat
+                </div>
+                <div style="font-size:12px;color:#9ca3af;margin-bottom:8px;">
+                    Ask for any group of addresses
+                </div>
 
                 <div id="loadingBar"><div></div></div>
 
                 <div id="chatbox">
                     {% if error %}
-                        <div class="msg"><div class="bubble bubble-assistant">Error: {{ error }}</div></div>
+                        <div class="bubble bubble-assistant" style="margin-bottom:8px;color:#f87171;">
+                            Error: {{ error }}
+                        </div>
                     {% endif %}
 
                     {% if results %}
-                        <div class="msg"><div class="bubble bubble-assistant">
+                        <div class="bubble bubble-assistant" style="margin-bottom:8px;">
                             <strong>{{ results|length }}</strong> address(es) found.
-                        </div></div>
+                        </div>
 
                         {% for r in results %}
                             <div class="result-item">
@@ -165,12 +198,16 @@
 
                 <form id="chatForm" method="POST" action="/search" class="input-row">
                     <input id="userInput" name="query"
-                           placeholder='Ask for addresses… e.g. “residential addresses in Vancouver WA with incomes over $100k”'
+                           placeholder='e.g. "homes in strongsville ohio"'
                            required>
-                    <button id="sendBtn">Send</button>
+                    <button id="sendBtn">Search</button>
                 </form>
 
-                <a href="/export" style="color:#bbf7d0;font-size:12px;margin-top:8px;">Export</a>
+                <div id="top-buttons">
+                    <a id="clearBtn" href="/clear">Clear</a>
+                    <a id="exportBtn" href="/export">Export</a>
+                </div>
+
             </div>
         </div>
 
@@ -178,7 +215,6 @@
 </div>
 
 <script>
-    // simple loading bar toggle
     const form = document.getElementById("chatForm");
     const loadingBar = document.getElementById("loadingBar");
 
