@@ -26,8 +26,8 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
 
-# ✅ FIXED PASSWORD — ONLY CHANGE IN THIS FILE
-PASSWORD = "Pel33!"   # <--- SET YOUR PASSWORD HERE
+# PASSWORD – BACK TO CaLuna
+PASSWORD = "CaLuna"
 
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
