@@ -26,7 +26,7 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "dev_secret")
 
-# PASSWORD – BACK TO CaLuna
+# LOGIN PASSWORD (as requested)
 PASSWORD = "CaLuna"
 
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
@@ -65,9 +65,10 @@ STATE_NAMES = {
 
 STATE_ABBRS = {abbr.lower(): abbr for abbr in STATE_NAMES.values()}
 
-# Demo dataset (Cuyahoga)
+# Demo baseline (still valid, just not the only thing anymore)
 OH_CUYAHOGA_DATASET = "merged_with_tracts/oh/cuyahoga-with-values-income.geojson"
 
+# Special-case mapping for Ohio city-only queries
 OH_CITY_TO_DATASET = {
     "strongsville": OH_CUYAHOGA_DATASET,
     "westlake": OH_CUYAHOGA_DATASET,
@@ -84,7 +85,7 @@ EXPORT_LIMIT = 5000
 
 
 # -----------------------------------------------------------
-# S3 HELPER
+# S3 HELPERS
 # -----------------------------------------------------------
 def load_geojson_from_s3(key: str) -> dict | None:
     try:
@@ -98,10 +99,63 @@ def load_geojson_from_s3(key: str) -> dict | None:
         return None
 
 
+def slugify_county_name(county: str) -> str:
+    """
+    Turn 'Santa Clara' -> 'santa_clara'
+    Turn 'st. louis' -> 'st_louis'
+    """
+    if not county:
+        return ""
+    c = county.lower().strip()
+    # remove trailing "county" if still present
+    c = re.sub(r"\bcounty\b", "", c).strip()
+    # replace any non-letter/digit with underscore
+    c = re.sub(r"[^a-z0-9]+", "_", c)
+    c = re.sub(r"_+", "_", c).strip("_")
+    return c
+
+
+def resolve_dataset_key(state_abbr: str | None, county: str | None, city: str | None) -> str | None:
+    """
+    Decide which S3 key to hit based on:
+      - Ohio city shortcuts
+      - Explicit county + state
+    """
+    if not state_abbr:
+        return None
+
+    state_abbr = state_abbr.upper()
+    state_prefix = state_abbr.lower()
+
+    # 1) Ohio city-only shortcuts (Strongsville, etc.)
+    if state_abbr == "OH" and city:
+        c = city.lower()
+        if c in OH_CITY_TO_DATASET:
+            return OH_CITY_TO_DATASET[c]
+
+    # 2) Explicit COUNTY + state: merged_with_tracts/{state}/{county}-with-values-income.geojson
+    if county:
+        county_slug = slugify_county_name(county)
+        if county_slug:
+            key = f"merged_with_tracts/{state_prefix}/{county_slug}-with-values-income.geojson"
+            print(f"[DEBUG] resolve_dataset_key → county-based key={key}")
+            return key
+
+    # 3) Fallback: if nothing matched, return None
+    print("[DEBUG] resolve_dataset_key → no key resolved")
+    return None
+
+
 # -----------------------------------------------------------
 # QUERY PARSING
 # -----------------------------------------------------------
 def parse_basic_query(q: str):
+    """
+    Detect:
+      - state_abbr: e.g. 'CA'
+      - county: e.g. 'santa clara'
+      - city: after 'in/near/around'
+    """
     q = (q or "").strip()
     q_lower = q.lower()
     tokens = re.split(r"[,\s]+", q_lower)
@@ -110,13 +164,13 @@ def parse_basic_query(q: str):
     county = None
     city = None
 
-    # Full-name state detection
+    # --- FULL-NAME STATE DETECTION ---
     for name, abbr in STATE_NAMES.items():
         if re.search(r"\b" + re.escape(name) + r"\b", q_lower):
             state_abbr = abbr
             break
 
-    # Abbreviation detection only if no state found
+    # --- ABBREVIATION DETECTION (only if full name not found) ---
     skip_words = {
         "in", "me", "my", "give", "get", "show", "find", "for", "to", "of",
         "the", "a", "home", "homes", "house", "houses", "addresses", "address",
@@ -131,14 +185,22 @@ def parse_basic_query(q: str):
                 state_abbr = STATE_ABBRS[tok]
                 break
 
-    # city detection
+    # --- COUNTY DETECTION: "santa clara county", "pinellas county" ---
+    m = re.search(r"\b([a-z\s]+?)\s+county\b", q_lower)
+    if m:
+        county_raw = m.group(1).strip()
+        # strip leading "in", "the", etc.
+        county_raw = re.sub(r"^(in|the)\s+", "", county_raw).strip()
+        county = county_raw or None
+
+    # --- CITY DETECTION (word after in/near/around/at) ---
     for i, w in enumerate(tokens):
         if w in ("in", "near", "around", "at"):
             if i + 1 < len(tokens):
                 city = tokens[i + 1]
                 break
 
-    print(f"[DEBUG] parse_basic_query → state={state_abbr}, city={city}")
+    print(f"[DEBUG] parse_basic_query → state={state_abbr}, county={county}, city={city}")
     return state_abbr, county, city
 
 
@@ -178,6 +240,7 @@ def parse_numeric_filters(q: str):
         elif has_value and not has_income:
             min_home_value = numeric_val
         elif has_income and has_value:
+            # if both mentioned, lean toward income; value filters still supported separately
             min_income = numeric_val
 
     print(f"[DEBUG] parse_numeric_filters → value={min_home_value}, income={min_income}")
@@ -214,10 +277,12 @@ def filter_features(features, city=None, min_home_value=None, min_income=None,
     for f in features:
         props = f.get("properties", {}) or {}
 
+        # City filter
         if city_norm:
             if str(props.get("city", "")).lower() != city_norm:
                 continue
 
+        # Income filter
         if min_income is not None:
             inc = _get_numeric_from_props(
                 props,
@@ -226,6 +291,7 @@ def filter_features(features, city=None, min_home_value=None, min_income=None,
             if inc is None or inc < min_income:
                 continue
 
+        # Home value filter
         if min_home_value is not None:
             val = _get_numeric_from_props(
                 props,
@@ -306,22 +372,26 @@ def search():
     min_home_value, min_income = parse_numeric_filters(query)
 
     if not state_abbr:
-        return render_template("index.html",
-                               error="Couldn't detect a state. Try 'addresses in strongsville ohio'.")
+        return render_template(
+            "index.html",
+            error="Couldn't detect a state. Try 'addresses in palo alto california' or 'addresses in santa clara county california'."
+        )
 
-    if state_abbr != "OH":
-        return render_template("index.html",
-                               error="Right now this demo is wired to Cuyahoga County, Ohio only.")
-
-    if city and city in OH_CITY_TO_DATASET:
-        dataset_key = OH_CITY_TO_DATASET[city]
-    else:
-        dataset_key = OH_CUYAHOGA_DATASET
+    # Resolve which dataset to hit
+    dataset_key = resolve_dataset_key(state_abbr, county, city)
+    if not dataset_key:
+        # For non-Ohio states, we currently require county to be specified
+        return render_template(
+            "index.html",
+            error="Couldn't detect a target county/dataset. For now, include a county, e.g. 'in santa clara county california'."
+        )
 
     data = load_geojson_from_s3(dataset_key)
     if not data or "features" not in data:
-        return render_template("index.html",
-                               error="Failed to load dataset.")
+        return render_template(
+            "index.html",
+            error=f"Failed to load dataset for that area (key: {dataset_key})."
+        )
 
     results = filter_features(
         data["features"],
@@ -333,12 +403,15 @@ def search():
     )
 
     if not results:
-        return render_template("index.html",
-                               error="No matching addresses found.")
+        return render_template(
+            "index.html",
+            error="No matching addresses found."
+        )
 
     session["last_query_meta"] = {
         "query": query,
         "state_abbr": state_abbr,
+        "county": county,
         "city": city,
         "min_home_value": min_home_value,
         "min_income": min_income,
@@ -354,17 +427,21 @@ def search():
 @app.route("/export")
 def export():
     if not session.get("logged_in"):
-        return redirect("/login")
+        return render_template("login.html")
 
     meta = session.get("last_query_meta")
     if not meta:
-        return render_template("index.html",
-                               error="No results to export.")
+        return render_template(
+            "index.html",
+            error="No results to export."
+        )
 
     data = load_geojson_from_s3(meta["dataset_key"])
     if not data:
-        return render_template("index.html",
-                               error="Failed to reload dataset.")
+        return render_template(
+            "index.html",
+            error="Failed to reload dataset."
+        )
 
     export_features = filter_features(
         data["features"],
@@ -376,13 +453,17 @@ def export():
     )
 
     if not export_features:
-        return render_template("index.html",
-                               error="No results to export.")
+        return render_template(
+            "index.html",
+            error="No results to export."
+        )
 
+    # Collect all property keys
     all_prop_keys = set()
     for item in export_features:
         all_prop_keys.update(item["properties"].keys())
 
+    # Base column mapping
     base_map = {
         "number": "Address Number",
         "street": "Street",
