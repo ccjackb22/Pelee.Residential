@@ -63,8 +63,20 @@ STATE_NAMES = {
 
 STATE_ABBRS = {abbr.lower(): abbr for abbr in STATE_NAMES.values()}
 
-# DEMO: Only Cuyahoga works right now
+# DEMO dataset — Cuyahoga only
 OH_CUYAHOGA_DATASET = "merged_with_tracts/oh/cuyahoga-with-values-income.geojson"
+
+# All Ohio cities map to Cuyahoga in demo mode
+OH_CITY_TO_DATASET = {
+    "strongsville": OH_CUYAHOGA_DATASET,
+    "westlake": OH_CUYAHOGA_DATASET,
+    "lakewood": OH_CUYAHOGA_DATASET,
+    "berea": OH_CUYAHOGA_DATASET,
+    "rocky": OH_CUYAHOGA_DATASET,
+    "rocky_river": OH_CUYAHOGA_DATASET,
+    "parma": OH_CUYAHOGA_DATASET,
+    "cleveland": OH_CUYAHOGA_DATASET,
+}
 
 DISPLAY_LIMIT = 500
 EXPORT_LIMIT = 5000
@@ -90,10 +102,10 @@ def load_geojson_from_s3(key: str) -> dict | None:
 # -----------------------------------------------------------
 def parse_basic_query(q: str):
     """
-    Returns:
-      state_abbr
-      county (always None right now)
-      city
+    Detects:
+      - state
+      - city (after “in”)
+      - county (not used yet)
     """
     q = (q or "").strip()
     q_lower = q.lower()
@@ -103,22 +115,37 @@ def parse_basic_query(q: str):
     county = None
     city = None
 
-    # 1) full-name state detection
+    # ----------------------------------------
+    # 1) FULL NAME STATE MATCH FIRST (OHIO)
+    # ----------------------------------------
     for name, abbr in STATE_NAMES.items():
-        if name in q_lower:
+        if re.search(r"\b" + re.escape(name) + r"\b", q_lower):
             state_abbr = abbr
+            break
 
-    # 2) abbreviation detection — FIXED “in” bug
-    for tok in tokens:
-        # ❗ DO NOT treat "in" as "IN" (Indiana)
-        if tok == "in":
-            continue
-        if tok in STATE_ABBRS:
-            state_abbr = STATE_ABBRS[tok]
+    # ----------------------------------------
+    # 2) ABBREVIATION DETECTION — ONLY IF
+    #    no full-name match was found
+    # ----------------------------------------
+    skip_words = {
+        "in", "me", "my", "give", "get", "show", "find", "for", "to", "of",
+        "the", "a", "home", "homes", "house", "houses", "addresses", "address",
+        "residential", "commercial", "properties", "property",
+    }
 
-    # 3) city detection
+    if state_abbr is None:
+        for tok in tokens:
+            if tok in skip_words:
+                continue
+            if len(tok) == 2 and tok in STATE_ABBRS:
+                state_abbr = STATE_ABBRS[tok]
+                break
+
+    # ----------------------------------------
+    # 3) CITY DETECTION
+    # ----------------------------------------
     for i, w in enumerate(tokens):
-        if w in ("in", "near", "at", "around"):
+        if w in ("in", "near", "around", "at"):
             if i + 1 < len(tokens):
                 city = tokens[i + 1]
                 break
@@ -215,7 +242,7 @@ def filter_features(features, city=None, min_home_value=None, min_income=None,
             if inc is None or inc < min_income:
                 continue
 
-        # value filter
+        # home value filter
         if min_home_value is not None:
             val = _get_numeric_from_props(
                 props,
@@ -298,13 +325,17 @@ def search():
     if not state_abbr:
         return render_template("index.html",
                                error="Couldn't detect a state. Try 'addresses in strongsville ohio'.")
-    
-    # ONLY OHIO IS WIRED
+
+    # DEMO: OHIO ONLY
     if state_abbr != "OH":
         return render_template("index.html",
                                error="Right now this demo is wired to Cuyahoga County, Ohio only.")
 
-    dataset_key = OH_CUYAHOGA_DATASET
+    # City mapping
+    if city and city in OH_CITY_TO_DATASET:
+        dataset_key = OH_CITY_TO_DATASET[city]
+    else:
+        dataset_key = OH_CUYAHOGA_DATASET
 
     data = load_geojson_from_s3(dataset_key)
     if not data or "features" not in data:
