@@ -121,7 +121,8 @@
 
     <div class="search-box">
         <form id="searchForm">
-            <input id="query" type="text" placeholder="Try: homes in Strongsville Ohio with incomes over 300k" />
+            <input id="query" type="text"
+                   placeholder="Try: homes in Strongsville Ohio with incomes over 300k" />
             <button class="btn" type="submit">Search</button>
         </form>
     </div>
@@ -150,7 +151,6 @@ document.getElementById("searchForm").addEventListener("submit", async function(
         return;
     }
 
-    // Summary block
     let summaryHtml = `
         <div class="summary">
             <strong>Query:</strong> ${data.query}<br>
@@ -160,7 +160,6 @@ document.getElementById("searchForm").addEventListener("submit", async function(
         </div>
     `;
 
-    // Result cards
     let cards = "";
     data.results.forEach(r => {
         cards += `
@@ -178,7 +177,6 @@ document.getElementById("searchForm").addEventListener("submit", async function(
         `;
     });
 
-    // Export button
     const exportButton = `
         <button class="btn export-btn" onclick="exportResults('${encodeURIComponent(q)}')">
             ⬇️ Export Full CSV
