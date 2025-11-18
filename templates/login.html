@@ -2,62 +2,117 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Pelée Login</title>
+    <title>PELÉE AI | Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
         body {
-            background: #0f172a;
-            color: #e5e7eb;
-            font-family: system-ui;
+            margin: 0;
+            min-height: 100vh;
             display: flex;
-            justify-content: center;
             align-items: center;
-            height: 100vh;
+            justify-content: center;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+            color: #e5e7eb;
         }
         .card {
-            background: #1e293b;
-            padding: 24px;
-            border-radius: 12px;
-            width: 320px;
-            border: 1px solid #334155;
-            text-align: center;
-        }
-        input {
             width: 100%;
-            padding: 10px;
+            max-width: 360px;
+            background: rgba(15,23,42,0.96);
+            border-radius: 16px;
+            padding: 24px 22px 20px;
+            border: 1px solid rgba(148,163,184,0.5);
+            box-shadow: 0 20px 60px rgba(15,23,42,0.9);
+        }
+        .logo {
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: 0.08em;
+            margin-bottom: 4px;
+        }
+        .logo span {
+            color: #38bdf8;
+        }
+        .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 16px;
+        }
+        label {
+            font-size: 13px;
+            display: block;
+            margin-bottom: 4px;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 9px 11px;
             border-radius: 8px;
-            border: 1px solid #475569;
-            background: #0f172a;
+            border: 1px solid rgba(148,163,184,0.7);
+            background: #020617;
             color: #e5e7eb;
-            margin-top: 10px;
+            outline: none;
+            font-size: 14px;
         }
-        button {
+        input[type="password"]::placeholder {
+            color: #6b7280;
+        }
+        .btn {
             width: 100%;
-            padding: 10px;
             margin-top: 14px;
-            background: #3b82f6;
+            padding: 9px 0;
+            border-radius: 999px;
             border: none;
-            border-radius: 8px;
-            color: white;
-            font-weight: 600;
             cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: linear-gradient(to right, #0ea5e9, #22c55e);
+            color: #020617;
+        }
+        .btn:hover {
+            filter: brightness(1.05);
         }
         .error {
-            color: #f87171;
-            font-size: 14px;
             margin-top: 10px;
+            font-size: 12px;
+            color: #fecaca;
+            background: rgba(127,29,29,0.8);
+            border-radius: 8px;
+            padding: 8px 9px;
+            border: 1px solid rgba(248,113,113,0.8);
+        }
+        .hint {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #6b7280;
         }
     </style>
 </head>
 <body>
 <div class="card">
-    <h2>Pelée Access</h2>
+    <div class="logo"><span>PELÉE</span> AI</div>
+    <div class="subtitle">Internal address search · password required</div>
+
     <form method="POST">
-        <input type="password" name="password" placeholder="Enter Password" required />
-        <button type="submit">Login</button>
-        {% if error %}
-            <p class="error">{{ error }}</p>
-        {% endif %}
+        <label for="password">Access password</label>
+        <input
+            id="password"
+            name="password"
+            type="password"
+            placeholder="Enter password"
+            autofocus
+        />
+        <button class="btn" type="submit">Enter</button>
     </form>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <div class="hint">
+        This tool is locked to your team. If you forget the password, update <code>PELEE_PASSWORD</code> in your environment.
+    </div>
 </div>
 </body>
 </html>
