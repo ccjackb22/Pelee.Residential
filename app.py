@@ -29,36 +29,21 @@ PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
 AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-2"))
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
-# IMPORTANT: enriched ACS data
+# per-county enriched files like: merged_with_tracts_acs/fl/wakulla-with-values-income.geojson
 S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts_acs")
 
-MAX_RESULTS = 500  # how many addresses to show in UI
+# how many address rows to show in UI
+MAX_RESULTS = 500
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 s3_client = boto3.client("s3", region_name=AWS_REGION)
 
-# simple in-memory cache of S3 keys per state
+# in-memory cache of S3 keys by state
 _STATE_KEYS_CACHE = {}
 
-# optional local index (for ZIP/city → state/county)
-S3_INDEX = None
-try:
-    if os.path.exists("s3_address_index.json"):
-        with open("s3_address_index.json", "r", encoding="utf-8") as f:
-            S3_INDEX = json.load(f)
-        app.logger.info("[INDEX] Loaded s3_address_index.json")
-    else:
-        app.logger.info("[INDEX] s3_address_index.json not found (ZIP/city lookup disabled)")
-except Exception as e:
-    app.logger.error(f"[INDEX] Failed to load s3_address_index.json: {e}")
-    S3_INDEX = None
-
-ZIP_RE = re.compile(r"\b\d{5}\b")
-
-
-# ----------------- UTILITIES -----------------
+# ----------------- LOOKUP TABLES -----------------
 
 US_STATES = {
     "alabama": "al",
@@ -113,7 +98,28 @@ US_STATES = {
     "wyoming": "wy",
 }
 
+# allow detection of 2-letter codes like "fl", "oh"
 STATE_CODES = {v: v for v in US_STATES.values()}
+
+# minimal ZIP → (STATE, COUNTY) mapping for what you’ve tested so far
+ZIP_TO_STATE_COUNTY = {
+    # Rocky River / ZIP 44116
+    "44116": ("OH", "cuyahoga"),
+    # you can add more here as needed
+    # "XXXXX": ("ST", "county_name"),
+}
+
+# minimal city → county mapping for things like Vancouver, WA
+CITY_TO_COUNTY = {
+    "wa": {
+        # city name (lowercase) -> (county_name, Pretty City Name)
+        "vancouver": ("clark", "Vancouver"),
+    },
+    # add more states / cities over time if you want
+}
+
+
+# ----------------- UTILITIES -----------------
 
 
 def normalize_text(s: str) -> str:
@@ -122,10 +128,7 @@ def normalize_text(s: str) -> str:
 
 def canonicalize_county_name(name: str) -> str:
     """
-    Make county names comparable:
-    - lowercase
-    - replace '_' and '-' with spaces
-    - remove 'county' / 'parish'
+    normalize "Wakulla", "Wakulla County" etc → "wakulla"
     """
     if not name:
         return ""
@@ -138,22 +141,21 @@ def canonicalize_county_name(name: str) -> str:
 
 def detect_state(q: str):
     """
-    Detect 2-letter state codes or full names.
-
-    FIX: ignore the preposition 'in' so we don't treat it as 'IN' (Indiana).
+    Try to detect a 2-letter state or full state name from the query.
     """
     q = q.lower()
     tokens = q.split()
 
-    # 1) look for 2-letter codes
+    # look for 2-letter codes first
     for t in tokens:
         t_clean = t.strip(",.").lower()
-        if t_clean == "in":  # don't treat "in" as Indiana
+        # don't treat the word "in" as Indiana
+        if t_clean == "in":
             continue
         if t_clean in STATE_CODES:
-            return STATE_CODES[t_clean].upper()
+            return t_clean.upper()
 
-    # 2) look for full names
+    # look for full names like "florida", "washington"
     for name, code in US_STATES.items():
         if name in q:
             return code.upper()
@@ -161,102 +163,47 @@ def detect_state(q: str):
     return None
 
 
-def guess_from_zip(zip_code: str):
+def extract_zip(query: str):
     """
-    Try to deduce (state, county) from s3_address_index.json.
-
-    This is defensive: it supports a few possible shapes of the index
-    and silently fails if it can't figure it out.
+    Return the first 5-digit ZIP code found, or None.
     """
-    if not S3_INDEX:
-        return None, None
-
-    try:
-        # Case 1: {"by_zip": {"44116": {...}}}
-        if isinstance(S3_INDEX, dict) and "by_zip" in S3_INDEX:
-            by_zip = S3_INDEX["by_zip"]
-            if isinstance(by_zip, dict) and zip_code in by_zip:
-                entry = by_zip[zip_code]
-                state = (
-                    entry.get("state")
-                    or entry.get("state_code")
-                    or entry.get("STATE")
-                    or entry.get("st")
-                )
-                county = (
-                    entry.get("county")
-                    or entry.get("county_name")
-                    or entry.get("COUNTY")
-                )
-                return state, county
-
-        # Case 2: top-level zip -> entry
-        if isinstance(S3_INDEX, dict) and zip_code in S3_INDEX:
-            entry = S3_INDEX[zip_code]
-            state = (
-                entry.get("state")
-                or entry.get("state_code")
-                or entry.get("STATE")
-                or entry.get("st")
-            )
-            county = (
-                entry.get("county")
-                or entry.get("county_name")
-                or entry.get("COUNTY")
-            )
-            return state, county
-
-        # Case 3: list of entries
-        if isinstance(S3_INDEX, list):
-            for entry in S3_INDEX:
-                z = str(
-                    entry.get("zip")
-                    or entry.get("ZIP")
-                    or entry.get("zipcode")
-                    or entry.get("postal_code")
-                    or ""
-                )
-                if z == zip_code:
-                    state = (
-                        entry.get("state")
-                        or entry.get("state_code")
-                        or entry.get("STATE")
-                        or entry.get("st")
-                    )
-                    county = (
-                        entry.get("county")
-                        or entry.get("county_name")
-                        or entry.get("COUNTY")
-                    )
-                    return state, county
-    except Exception as e:
-        app.logger.warning(f"[ZIP] lookup failed for {zip_code}: {e}")
-
-    return None, None
+    m = re.search(r"\b(\d{5})\b", query)
+    return m.group(1) if m else None
 
 
-def parse_location(query: str):
+def parse_location_and_filters(query: str):
     """
-    Parse state + county + city from a free-form query.
+    Parse state, county, city, ZIP and income/value filters from a query.
 
-    Priority:
-    - if 'county' present → extract county tokens before 'county'
-    - else, handle special OH city-only queries (default Cuyahoga)
-    - else, try ZIP fallback via s3_address_index.json (if present)
+    Supports:
+      - "addresses in Wakulla County Florida"
+      - "ZIP 44116 residential addresses"
+      - "addresses in vancouver wa"
+      - "homes in Strongsville Ohio with incomes over 300k"
     """
-    q = normalize_text(query)
+    raw = query or ""
+    q = normalize_text(raw)
     tokens = q.split()
 
+    # numeric filters
+    income_min, value_min = parse_numeric_filters(raw)
+
+    # 1) ZIP detection (even if no state is mentioned)
+    zip_code = extract_zip(raw)
     state = detect_state(q)
     county = None
     city = None
 
-    # county pattern "... X Y county STATE ..."
-    if "county" in tokens:
-        idxs = [i for i, t in enumerate(tokens) if t == "county"]
-        idx = idxs[0]
+    if zip_code and zip_code in ZIP_TO_STATE_COUNTY:
+        zip_state, zip_county = ZIP_TO_STATE_COUNTY[zip_code]
+        if not state:
+            state = zip_state
+        county = zip_county
+
+    # 2) County by "X County Y" pattern (only if we don't already have a county)
+    if not county and "county" in tokens:
+        idx = tokens.index("county")
         j = idx - 1
-        county_tokens_rev = []
         STOP = {
             "in",
             "of",
@@ -268,14 +215,11 @@ def parse_location(query: str):
             "residential",
             "addresses",
             "parcels",
-            "zip",
         }
+        county_tokens_rev = []
         while j >= 0:
             t = tokens[j]
             if t in STOP:
-                break
-            # don't cross explicit state mentions
-            if t.upper() in STATE_CODES or t in US_STATES:
                 break
             county_tokens_rev.append(t)
             j -= 1
@@ -283,17 +227,17 @@ def parse_location(query: str):
         if county_tokens:
             county = " ".join(county_tokens)
 
-    # Ohio city-only queries → default Cuyahoga
+    # 3) If Ohio city-only ("Strongsville Ohio") → default county Cuyahoga
     if not county and state == "OH":
         state_idx = None
         for i, t in enumerate(tokens):
-            if (t.lower() in STATE_CODES) or (t in US_STATES):
+            if t.lower() in STATE_CODES or t in US_STATES:
                 state_idx = i
                 break
         if state_idx is not None and state_idx > 0:
             j = state_idx - 1
-            city_tokens_rev = []
             STOP = {"in", "ohio", "oh"}
+            city_tokens_rev = []
             while j >= 0 and tokens[j] not in STOP:
                 city_tokens_rev.append(tokens[j])
                 j -= 1
@@ -302,18 +246,17 @@ def parse_location(query: str):
                 city = " ".join(city_tokens)
         county = "cuyahoga"
 
-    # ZIP-only / ZIP-first queries: try to infer from index
-    if not state:
-        m = ZIP_RE.search(q)
-        if m:
-            zip_code = m.group(0)
-            z_state, z_county = guess_from_zip(zip_code)
-            if z_state:
-                state = z_state.upper()
-            if z_county and not county:
-                county = z_county
+    # 4) City → County mapping for things like Vancouver, WA
+    if state and not county:
+        st_key = state.lower()
+        city_map = CITY_TO_COUNTY.get(st_key, {})
+        for city_name, (city_county, pretty_city) in city_map.items():
+            if city_name in q:
+                county = city_county
+                city = pretty_city
+                break
 
-    return state, county, city
+    return state, county, city, zip_code, income_min, value_min
 
 
 def parse_numeric_filters(query: str):
@@ -353,69 +296,65 @@ def parse_numeric_filters(query: str):
     return income_min, value_min
 
 
-def list_state_keys(state_code: str):
+def list_state_keys(state: str):
     """
-    Cache + return all keys under S3_PREFIX/{state_code}/
+    Return all GeoJSON keys under S3_PREFIX/<state>/, cached in memory.
     """
-    state_code = state_code.lower()
-    if state_code in _STATE_KEYS_CACHE:
-        return _STATE_KEYS_CACHE[state_code]
+    state = (state or "").lower()
+    if not state:
+        return []
 
-    prefix = f"{S3_PREFIX}/{state_code}/"
+    if state in _STATE_KEYS_CACHE:
+        return _STATE_KEYS_CACHE[state]
+
+    prefix = f"{S3_PREFIX}/{state}/"
     keys = []
-    continuation = None
+    token = None
 
     while True:
+        kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+        if token:
+            kwargs["ContinuationToken"] = token
+
         try:
-            if continuation:
-                resp = s3_client.list_objects_v2(
-                    Bucket=S3_BUCKET,
-                    Prefix=prefix,
-                    ContinuationToken=continuation,
-                )
-            else:
-                resp = s3_client.list_objects_v2(
-                    Bucket=S3_BUCKET,
-                    Prefix=prefix,
-                )
+            resp = s3_client.list_objects_v2(**kwargs)
         except ClientError as e:
-            app.logger.error(f"[S3] list_objects_v2 failed for state={state_code}: {e}")
+            app.logger.error(f"[S3] list_objects_v2 failed for state={state}: {e}")
             break
 
-        contents = resp.get("Contents", [])
-        for obj in contents:
+        for obj in resp.get("Contents", []):
             key = obj.get("Key")
             if key and key.endswith(".geojson"):
                 keys.append(key)
 
         if resp.get("IsTruncated"):
-            continuation = resp.get("NextContinuationToken")
+            token = resp.get("NextContinuationToken")
         else:
             break
 
-    _STATE_KEYS_CACHE[state_code] = keys
-    app.logger.info(f"[S3] Cached {len(keys)} keys for state={state_code}")
+    _STATE_KEYS_CACHE[state] = keys
+    app.logger.info(f"[S3] Cached {len(keys)} keys for state={state}")
     return keys
 
 
 def resolve_dataset_key(state: str, county: str):
     """
-    Given a state code (e.g. 'FL') and county name (e.g. 'Palm Beach'),
+    Given state code (e.g., 'FL') and county name (e.g., 'Wakulla'),
     pick the best matching S3 key.
 
-    Preference order:
-    1) exact county match + '-with-values-income'
-    2) exact county match + '.geojson'
-    3) fuzzy (starts/contains) with '-with-values-income'
-    4) fuzzy with '.geojson'
+    Preference:
+      1) exact county + '-with-values-income'
+      2) exact county + '.geojson'
+      3) fuzzy with '-with-values-income'
+      4) fuzzy raw '.geojson'
     """
     if not state or not county:
         return None
 
-    state_code = state.lower()
+    state = state.lower()
     county_clean = canonicalize_county_name(county)
 
-    keys = list_state_keys(state_code)
+    keys = list_state_keys(state)
     if not keys:
         return None
 
@@ -428,24 +367,15 @@ def resolve_dataset_key(state: str, county: str):
         fname = key.split("/")[-1]
         if not fname.endswith(".geojson"):
             continue
-        base = fname[:-len(".geojson")]  # strip .geojson
-        has_values = "with-values-income" in base
+        base = fname[:-len(".geojson")]
+        enriched = "with-values-income" in base
         base_no_suffix = base.replace("-with-values-income", "")
         base_canon = canonicalize_county_name(base_no_suffix)
 
-        if not base_canon:
-            continue
-
         if base_canon == county_clean:
-            if has_values:
-                enriched_exact.append(key)
-            else:
-                raw_exact.append(key)
+            (enriched_exact if enriched else raw_exact).append(key)
         elif base_canon.startswith(county_clean) or county_clean.startswith(base_canon):
-            if has_values:
-                enriched_fuzzy.append(key)
-            else:
-                raw_fuzzy.append(key)
+            (enriched_fuzzy if enriched else raw_fuzzy).append(key)
 
     for bucket in (enriched_exact, raw_exact, enriched_fuzzy, raw_fuzzy):
         if bucket:
@@ -456,62 +386,72 @@ def resolve_dataset_key(state: str, county: str):
 
 def load_geojson_from_s3(key: str):
     """
-    Simplified: read full object. For your county-level files this is fine
-    and avoids the streaming weirdness that was hitting worker timeouts.
+    Simple S3 load: read the whole object and json.loads it.
+
+    Per-county files are small enough that this is safe and avoids
+    weird streaming / timeout issues you saw earlier.
     """
     try:
         resp = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
         body = resp["Body"].read()
         return json.loads(body)
     except Exception as e:
-        app.logger.error(f"[S3] get_object failed for {key}: {e}")
+        app.logger.error(f"[S3] load failed for {key}: {e}")
         raise
 
 
-def filter_features(features, income_min=None, value_min=None):
+def filter_features(features, income_min=None, value_min=None, zip_code=None):
     """
-    Filter features by optional 'median_income' / 'median_value' fields (or similar).
-    We'll look for several possible property names.
+    Filter by income, value, and optional ZIP (postcode).
     """
-    if income_min is None and value_min is None:
+    if (income_min is None) and (value_min is None) and not zip_code:
         return features
 
     income_keys = ["DP03_0062E", "median_income", "income", "household_income"]
     value_keys = ["DP04_0089E", "median_value", "home_value", "value"]
 
-    def get_first(props, keys):
+    def read_val(props, keys):
         for k in keys:
-            if k in props and props[k] not in (None, ""):
+            if k in props and props[k] not in ("", None):
                 try:
                     return float(props[k])
-                except (TypeError, ValueError):
-                    continue
+                except Exception:
+                    pass
         return None
 
-    filtered = []
-    for feat in features:
-        props = feat.get("properties", {})
+    out = []
+    for f in features:
+        p = f.get("properties", {})
         keep = True
 
-        if income_min is not None:
-            inc = get_first(props, income_keys)
-            if inc is None or inc < income_min:
+        # ZIP filter
+        if zip_code is not None:
+            pc = str(p.get("postcode") or "").strip()
+            if pc != zip_code:
+                keep = False
+
+        if keep and income_min is not None:
+            v = read_val(p, income_keys)
+            if v is None or v < income_min:
                 keep = False
 
         if keep and value_min is not None:
-            val = get_first(props, value_keys)
-            if val is None or val < value_min:
+            v = read_val(p, value_keys)
+            if v is None or v < value_min:
                 keep = False
 
         if keep:
-            filtered.append(feat)
+            out.append(f)
 
-    return filtered
+    return out
 
 
 def feature_to_address_obj(feat):
+    """
+    Convert a GeoJSON feature into the object your front-end expects.
+    """
     props = feat.get("properties", {})
-    geom = feat.get("geometry") or {}
+    geom = feat.get("geometry", {}) or {}
     coords = geom.get("coordinates") or [None, None]
 
     number = props.get("number") or props.get("house_number") or ""
@@ -522,13 +462,20 @@ def feature_to_address_obj(feat):
     region = props.get("region") or props.get("STUSPS") or ""
     postcode = props.get("postcode") or ""
 
-    income = props.get("DP03_0062E") or props.get("median_income")
-    value = props.get("DP04_0089E") or props.get("median_value")
-
-    address_line = " ".join(x for x in [str(number), street, unit] if x)
+    income = (
+        props.get("DP03_0062E")
+        or props.get("median_income")
+        or props.get("income")
+    )
+    value = (
+        props.get("DP04_0089E")
+        or props.get("median_value")
+        or props.get("home_value")
+        or props.get("value")
+    )
 
     return {
-        "address": address_line,
+        "address": " ".join(x for x in [str(number), street, unit] if x),
         "city": city,
         "state": region,
         "zip": postcode,
@@ -544,8 +491,7 @@ def feature_to_address_obj(feat):
 
 @app.route("/health")
 def health():
-    env_ok = bool(AWS_REGION) and bool(S3_BUCKET)
-    return jsonify({"ok": True, "env_s3": env_ok})
+    return jsonify({"ok": True})
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -572,42 +518,42 @@ def index():
     return render_template("index.html")
 
 
-def _get_query_from_request():
-    """
-    Support both form POST and JSON POST without blowing up.
-    """
-    if request.is_json:
-        data = request.get_json(silent=True) or {}
-        return (data.get("query") or "").strip()
-    return (request.form.get("query") or "").strip()
-
-
 @app.route("/search", methods=["POST"])
 def search():
     if not session.get("authed"):
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
     try:
-        query = _get_query_from_request()
-        app.logger.debug(f"/search query={query!r}")
+        if request.is_json:
+            data = request.get_json(silent=True) or {}
+            query = (data.get("query") or "").strip()
+        else:
+            query = (request.form.get("query") or "").strip()
 
         if not query:
             return jsonify({"ok": False, "error": "Please enter a query."})
 
-        state, county, city = parse_location(query)
-        income_min, value_min = parse_numeric_filters(query)
+        (
+            state,
+            county,
+            city,
+            zip_code,
+            income_min,
+            value_min,
+        ) = parse_location_and_filters(query)
 
-        app.logger.debug(f"parse_location → state={state}, county={county}, city={city}")
-        app.logger.debug(f"parse_numeric_filters → income_min={income_min}, value_min={value_min}")
+        app.logger.info(
+            f"[search] query={query!r} → state={state}, county={county}, city={city}, zip={zip_code}, "
+            f"income_min={income_min}, value_min={value_min}"
+        )
 
         if not state:
             return jsonify({"ok": False, "error": "No state detected."})
-
         if not county:
             return jsonify({"ok": False, "error": "No county detected."})
 
         key = resolve_dataset_key(state, county)
-        app.logger.debug(f"resolve_dataset_key → key={key}")
+        app.logger.info(f"[search] resolved dataset_key={key}")
 
         if not key:
             return jsonify(
@@ -617,15 +563,28 @@ def search():
                 }
             )
 
-        gj = load_geojson_from_s3(key)
-        features = gj.get("features", [])
-        app.logger.debug(f"Loaded {len(features)} features from {key}")
+        try:
+            gj = load_geojson_from_s3(key)
+        except Exception as e:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": f"Failed loading {key}: {str(e)}",
+                }
+            )
 
-        features = filter_features(features, income_min=income_min, value_min=value_min)
-        total = len(features)
-        features = features[:MAX_RESULTS]
+        feats = gj.get("features", [])
+        feats = filter_features(
+            feats,
+            income_min=income_min,
+            value_min=value_min,
+            zip_code=zip_code,
+        )
 
-        results = [feature_to_address_obj(f) for f in features]
+        total = len(feats)
+        feats = feats[:MAX_RESULTS]
+
+        addresses = [feature_to_address_obj(f) for f in feats]
 
         return jsonify(
             {
@@ -633,16 +592,17 @@ def search():
                 "query": query,
                 "state": state,
                 "county": county,
+                "city": city,
+                "zip": zip_code,
                 "dataset_key": key,
                 "total": total,
-                "shown": len(results),
-                "results": results,
+                "shown": len(addresses),
+                "results": addresses,
             }
         )
     except Exception as e:
-        app.logger.exception(f"/search internal error: {e}")
-        # IMPORTANT: return 200 with ok=False so the frontend does NOT show a raw 500 page
-        return jsonify({"ok": False, "error": "Internal error while processing your query."})
+        app.logger.exception(f"[search] unexpected error: {e}")
+        return jsonify({"ok": False, "error": "Server error (search failed)."}), 500
 
 
 @app.route("/export", methods=["POST"])
@@ -650,65 +610,71 @@ def export():
     if not session.get("authed"):
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
 
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        query = (data.get("query") or "").strip()
+    else:
+        query = (request.form.get("query") or "").strip()
+
+    if not query:
+        return jsonify({"ok": False, "error": "Missing query for export."}), 400
+
+    state, county, city, zip_code, income_min, value_min = parse_location_and_filters(query)
+
+    if not state or not county:
+        return jsonify({"ok": False, "error": "Need a state + county to export."}), 400
+
+    key = resolve_dataset_key(state, county)
+    if not key:
+        return jsonify(
+            {
+                "ok": False,
+                "error": f"No dataset found for export for {county} County, {state}.",
+            }
+        ), 400
+
     try:
-        query = _get_query_from_request()
-        if not query:
-            return jsonify({"ok": False, "error": "Missing query for export."})
-
-        state, county, _ = parse_location(query)
-        income_min, value_min = parse_numeric_filters(query)
-
-        if not state or not county:
-            return jsonify({"ok": False, "error": "Need a recognisable state and county to export."})
-
-        key = resolve_dataset_key(state, county)
-        if not key:
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": f"No dataset found for export for {county} County, {state}.",
-                }
-            )
-
         gj = load_geojson_from_s3(key)
-        features = gj.get("features", [])
-        features = filter_features(features, income_min=income_min, value_min=value_min)
-
-        rows = []
-        fieldnames = set()
-
-        for feat in features:
-            props = feat.get("properties", {}).copy()
-            geom = feat.get("geometry") or {}
-            coords = geom.get("coordinates") or [None, None]
-            props["lon"] = coords[0]
-            props["lat"] = coords[1]
-            fieldnames.update(props.keys())
-            rows.append(props)
-
-        fieldnames = sorted(fieldnames)
-
-        memfile = io.BytesIO()
-        with zipfile.ZipFile(memfile, "w", zipfile.ZIP_DEFLATED) as zf:
-            csv_buf = io.StringIO()
-            writer = csv.DictWriter(csv_buf, fieldnames=fieldnames)
-            writer.writeheader()
-            for r in rows:
-                writer.writerow(r)
-            zf.writestr("addresses.csv", csv_buf.getvalue())
-
-        memfile.seek(0)
-        filename = f"pelee_export_{state}_{canonicalize_county_name(county).replace(' ', '_')}.zip"
-
-        return send_file(
-            memfile,
-            mimetype="application/zip",
-            as_attachment=True,
-            download_name=filename,
-        )
     except Exception as e:
-        app.logger.exception(f"/export internal error: {e}")
-        return jsonify({"ok": False, "error": "Internal error while preparing export."})
+        return jsonify(
+            {"ok": False, "error": f"Failed to load dataset for export: {str(e)}"}
+        ), 500
+
+    feats = gj.get("features", [])
+    feats = filter_features(feats, income_min=income_min, value_min=value_min, zip_code=zip_code)
+
+    rows = []
+    fieldnames = set()
+
+    for f in feats:
+        props = f.get("properties", {}).copy()
+        geom = f.get("geometry", {}) or {}
+        coords = geom.get("coordinates") or [None, None]
+        props["lon"] = coords[0]
+        props["lat"] = coords[1]
+        rows.append(props)
+        fieldnames.update(props.keys())
+
+    fieldnames = sorted(fieldnames)
+
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zf:
+        buf = io.StringIO()
+        writer = csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+        zf.writestr("addresses.csv", buf.getvalue())
+
+    mem.seek(0)
+    fname = f"pelee_export_{state}_{canonicalize_county_name(county).replace(' ', '_')}.zip"
+
+    return send_file(
+        mem,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=fname,
+    )
 
 
 # ----------------- MAIN -----------------
