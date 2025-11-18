@@ -1,222 +1,214 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Pelée AI – Data Tool</title>
-    <style>
-        :root { color-scheme: dark; }
-        * { box-sizing: border-box; }
+    <meta charset="UTF-8" />
+    <title>Pelée | AI Address Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+    <style>
         body {
             margin: 0;
-            min-height: 100vh;
-            font-family: system-ui, sans-serif;
-            background:
-                radial-gradient(circle at top left, #1e293b 0, transparent 55%),
-                radial-gradient(circle at top right, #0f172a 0, #020617 60%);
-            color: #e5e7eb;
+            padding: 0;
+            font-family: Inter, Arial, sans-serif;
+            background: #f4f7fa;
+            color: #222;
         }
 
-        .page { max-width: 1150px; margin: 0 auto; padding: 32px 20px 40px; }
-
-        .brand { display: flex; align-items: center; gap: 10px; }
-        .brand-logo {
-            width: 32px; height: 32px; border-radius: 999px;
-            background: radial-gradient(circle at 30% 30%, #facc15, #f97316);
-            display: flex; align-items: center; justify-content: center;
-            font-weight: 800; font-size: 18px; color: #020617;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        header {
+            padding: 25px 30px;
+            background: #0d2235;
+            color: white;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 1px;
         }
-        .brand-name { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
 
-        .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .left-card {
-            background: rgba(15,23,42,0.9);
+        .container {
+            width: 100%;
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+
+        .search-box {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+
+        .search-box input {
+            width: 100%;
             padding: 14px;
-            border-radius: 14px;
-            border: 1px solid #334155;
+            font-size: 18px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            outline: none;
         }
 
-        .chat-card {
-            height: 480px; display: flex; flex-direction: column;
-            background: rgba(15,23,42,0.95);
-            border-radius: 20px; padding: 18px;
-            border: 1px solid rgba(148,163,184,0.35);
-        }
-        #chatbox { flex: 1; overflow-y: auto; padding: 8px 4px; font-size: 13px; }
-        .msg { margin-bottom: 10px; }
-        .bubble {
-            display: inline-block; padding: 8px 11px; border-radius: 14px;
-            max-width: 85%; line-height: 1.4;
-        }
-        .bubble-assistant {
-            background: #020617; color: #e5e7eb;
-            border: 1px solid #334155; border-bottom-left-radius: 4px;
+        .btn {
+            margin-top: 12px;
+            padding: 12px 20px;
+            background: #0d2235;
+            color: white;
+            border: none;
+            font-size: 17px;
+            border-radius: 8px;
+            cursor: pointer;
         }
 
-        .input-row { display: flex; gap: 10px; margin-top: 10px; }
-        #userInput {
-            flex: 1; padding: 10px; border-radius: 10px;
-            border: 1px solid #475569; background: #0f172a; color: white;
-        }
-        #sendBtn {
-            padding: 0 16px; border-radius: 10px;
-            background: #3b82f6; border: none; color: white; cursor: pointer;
+        .btn:hover {
+            background: #123856;
         }
 
-        #loadingBar {
-            width: 100%; height: 4px;
-            background: rgba(255,255,255,0.15);
-            margin-top: 8px; overflow: hidden;
-            border-radius: 4px; display: none;
-        }
-        #loadingBar div {
-            width: 0%; height: 100%; background: #3b82f6;
-            animation: loadAnim 1.2s infinite linear;
-        }
-        @keyframes loadAnim {
-            0% { width: 0%; }
-            50% { width: 80%; }
-            100% { width: 0%; }
+        #results-container {
+            margin-top: 30px;
         }
 
-        .result-item { border-top: 1px solid #334155; padding: 8px 0; font-size: 12px; }
+        .result-card {
+            background: white;
+            padding: 18px;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
+            line-height: 1.55;
+            border-left: 5px solid #0d2235;
+        }
 
-        .export-row {
-            margin-top: 8px;
-            font-size: 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: #9ca3af;
+        .address {
+            font-size: 18px;
+            font-weight: 600;
         }
-        .export-row a {
-            color: #bbf7d0;
-            text-decoration: none;
-            margin-left: 12px;
+
+        .meta {
+            margin-top: 6px;
+            font-size: 15px;
+            color: #444;
         }
-        .export-row a:hover {
-            text-decoration: underline;
+
+        .summary {
+            margin: 20px 0;
+            padding: 15px;
+            background: #eef4ff;
+            border-left: 5px solid #0d2235;
+            border-radius: 6px;
+        }
+
+        .export-btn {
+            background: #1565c0;
+            margin-top: 10px;
+        }
+
+        .export-btn:hover {
+            background: #1a74d1;
+        }
+
+        .error-box {
+            background: #ffe5e5;
+            border-left: 5px solid #cc0000;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 6px;
+            color: #900;
         }
     </style>
 </head>
-
 <body>
-<div class="page">
-    <header>
-        <div class="brand">
-            <div class="brand-logo">P</div>
-            <div>
-                <div class="brand-name">PELÉE AI</div>
-                <div style="font-size:13px;color:#9ca3af;">Internal Data Tool</div>
-            </div>
-        </div>
-    </header>
 
-    <section class="hero">
+<header>Pelée AI – Address Search</header>
 
-        <div>
-            <h1 style="font-size:28px;margin:0 0 12px;">
-                Pull <span style="color:#facc15;">hyper-targeted</span> addresses with one prompt.
-            </h1>
-            <p style="color:#9ca3af;">
-                Ask Pelée for residential or commercial addresses by city, ZIP, street, income bands, home values, and more.
-            </p>
+<div class="container">
 
-            <ul style="font-size:13px;color:#9ca3af; margin-bottom:18px;">
-                <li>“Palo Alto CA homes with incomes over $500k.”</li>
-                <li>“Addresses on Middlefield Rd in Palo Alto CA.”</li>
-                <li>“Santa Clara County properties above $2M.”</li>
-            </ul>
+    <div class="search-box">
+        <form id="searchForm">
+            <input id="query" type="text" placeholder="Try: homes in Strongsville Ohio with incomes over 300k" />
+            <button class="btn" type="submit">Search</button>
+        </form>
+    </div>
 
-            <div class="left-card">
-                <h3>Examples</h3>
-                <ul style="font-size:12px;margin:0 0 10px;padding-left:16px;">
-                    <li>• Homes in Palo Alto CA with incomes over $300k</li>
-                    <li>• ZIP 94301 residential addresses</li>
-                    <li>• Addresses in Santa Clara County CA over $2M value</li>
-                    <li>• All parcels in San Mateo County CA</li>
-                </ul>
-
-                <h3>Searchable Data Fields</h3>
-                <table style="font-size:11px;width:100%;margin-top:6px;">
-                    <tr><td>Address</td><td>number, street, unit</td></tr>
-                    <tr><td>City / ZIP / State</td><td>city, postcode, region/STUSPS</td></tr>
-                    <tr><td>County</td><td>NAME, COUNTYFP, NAMELSADCO</td></tr>
-                    <tr><td>Census Tract</td><td>GEOID, GEOIDFQ, TRACTCE</td></tr>
-                    <tr><td>Land / Water</td><td>ALAND, AWATER</td></tr>
-                    <tr><td>Coordinates</td><td>geometry.coordinates</td></tr>
-                    <tr><td>Value &amp; Income</td><td>Attached home value &amp; household income metrics where available</td></tr>
-                </table>
-            </div>
-        </div>
-
-        <div>
-            <div class="chat-card">
-                <div style="font-size:14px;font-weight:600; margin-bottom:4px;">Pelée Data Chat</div>
-                <div style="font-size:12px;color:#9ca3af;margin-bottom:6px;">
-                    Ask for any group of addresses.
-                    <br>
-                    <span style="font-size:11px;color:#6b7280;">
-                        For most states, include the county (e.g. “in king county washington”).
-                        Ohio city-only queries will use Cuyahoga by default.
-                    </span>
-                </div>
-
-                <div id="loadingBar"><div></div></div>
-
-                <div id="chatbox">
-                    {% if error %}
-                        <div class="msg">
-                            <div class="bubble bubble-assistant">Error: {{ error }}</div>
-                        </div>
-                    {% endif %}
-
-                    {% if results %}
-                        <div class="msg">
-                            <div class="bubble bubble-assistant">
-                                <strong>{{ results|length }}</strong> address(es) found.
-                            </div>
-                        </div>
-
-                        {% for r in results %}
-                            <div class="result-item">
-                                {{ r.number }} {{ r.street }} {{ r.unit }}<br>
-                                <small>{{ r.city }}, {{ r.region }} {{ r.postcode }}</small>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                </div>
-
-                <form id="chatForm" method="POST" action="/search" class="input-row">
-                    <input id="userInput" name="query"
-                           placeholder='Ask for addresses… e.g. “homes in palo alto california with incomes over 300k”'
-                           required>
-                    <button id="sendBtn" type="submit">Send</button>
-                </form>
-
-                <div class="export-row">
-                    <span>
-                        Export the current result set as a zipped CSV with address, income, value, and all available fields.
-                    </span>
-                    <span>
-                        <a href="/export">Export</a>
-                        <a href="/clear">Clear</a>
-                    </span>
-                </div>
-            </div>
-        </div>
-
-    </section>
+    <div id="results-container"></div>
 </div>
 
 <script>
-    const form = document.getElementById("chatForm");
-    const loadingBar = document.getElementById("loadingBar");
+document.getElementById("searchForm").addEventListener("submit", async function(e) {
+    e.preventDefault();
 
-    form.addEventListener("submit", () => {
-        loadingBar.style.display = "block";
+    const q = document.getElementById("query").value.trim();
+    const resultsDiv = document.getElementById("results-container");
+    resultsDiv.innerHTML = "<div class='summary'>Searching…</div>";
+
+    const resp = await fetch("/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: q })
     });
+
+    const data = await resp.json();
+
+    if (!data.ok) {
+        resultsDiv.innerHTML = `<div class='error-box'>${data.error || "Unknown error"}</div>`;
+        return;
+    }
+
+    // Summary block
+    let summaryHtml = `
+        <div class="summary">
+            <strong>Query:</strong> ${data.query}<br>
+            <strong>County:</strong> ${data.county}, ${data.state}<br>
+            <strong>Dataset:</strong> ${data.dataset_key}<br>
+            <strong>Showing:</strong> ${data.shown} of ${data.total}
+        </div>
+    `;
+
+    // Result cards
+    let cards = "";
+    data.results.forEach(r => {
+        cards += `
+            <div class="result-card">
+                <div class="address">${r.address}</div>
+                <div class="meta">
+                    ${r.city}, ${r.state} ${r.zip}<br>
+                    <strong>Income:</strong> ${r.income ?? "N/A"}<br>
+                    <strong>Value:</strong> ${r.value ?? "N/A"}<br>
+                    <strong>Lat:</strong> ${r.lat ?? "—"}  
+                    &nbsp;&nbsp;
+                    <strong>Lon:</strong> ${r.lon ?? "—"}
+                </div>
+            </div>
+        `;
+    });
+
+    // Export button
+    const exportButton = `
+        <button class="btn export-btn" onclick="exportResults('${encodeURIComponent(q)}')">
+            ⬇️ Export Full CSV
+        </button>
+    `;
+
+    resultsDiv.innerHTML = summaryHtml + exportButton + cards;
+});
+
+async function exportResults(q) {
+    const resp = await fetch("/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: decodeURIComponent(q) })
+    });
+
+    if (!resp.ok) {
+        alert("Export failed.");
+        return;
+    }
+
+    const blob = await resp.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "pelee_export.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
 </script>
 
 </body>
