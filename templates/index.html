@@ -10,120 +10,259 @@
             margin: 0;
             padding: 0;
             font-family: Inter, Arial, sans-serif;
-            background: #f4f7fa;
-            color: #222;
+            background: #050b12;
+            color: #f5f7fb;
         }
 
         header {
-            padding: 25px 30px;
-            background: #0d2235;
-            color: white;
-            font-size: 28px;
+            padding: 24px 30px;
+            background: linear-gradient(135deg, #050b12, #061c34);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header .title {
+            font-size: 22px;
             font-weight: 700;
-            letter-spacing: 1px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        header .subtitle {
+            font-size: 13px;
+            opacity: 0.7;
+            margin-top: 4px;
         }
 
         .container {
             width: 100%;
-            max-width: 900px;
-            margin: 30px auto;
+            max-width: 1100px;
+            margin: 26px auto 40px;
             padding: 0 20px;
         }
 
         .search-box {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            background: rgba(9, 19, 35, 0.95);
+            padding: 22px 22px 18px;
+            border-radius: 16px;
+            box-shadow: 0 18px 45px rgba(0,0,0,0.45);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
         }
 
         .search-box input {
-            width: 100%;
-            padding: 14px;
-            font-size: 18px;
-            border: 1px solid #ccc;
-            border-radius: 8px;
+            flex: 1;
+            padding: 13px 14px;
+            font-size: 16px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(4,10,18,0.95);
+            color: #f5f7fb;
             outline: none;
         }
 
+        .search-box input::placeholder {
+            color: rgba(245,247,251,0.45);
+        }
+
         .btn {
-            margin-top: 12px;
             padding: 12px 20px;
-            background: #0d2235;
+            background: #1b63ff;
             color: white;
             border: none;
-            font-size: 17px;
-            border-radius: 8px;
+            font-size: 15px;
+            border-radius: 10px;
             cursor: pointer;
+            white-space: nowrap;
         }
 
         .btn:hover {
-            background: #123856;
+            background: #295fff;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: default;
+        }
+
+        .hint {
+            margin-top: 8px;
+            font-size: 13px;
+            color: rgba(245,247,251,0.65);
+        }
+
+        .hint span {
+            opacity: 0.6;
         }
 
         #results-container {
-            margin-top: 30px;
-        }
-
-        .result-card {
-            background: white;
-            padding: 18px;
-            border-radius: 10px;
-            margin-bottom: 14px;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.05);
-            line-height: 1.55;
-            border-left: 5px solid #0d2235;
-        }
-
-        .address {
-            font-size: 18px;
-            font-weight: 600;
-        }
-
-        .meta {
-            margin-top: 6px;
-            font-size: 15px;
-            color: #444;
+            margin-top: 26px;
         }
 
         .summary {
-            margin: 20px 0;
-            padding: 15px;
-            background: #eef4ff;
-            border-left: 5px solid #0d2235;
-            border-radius: 6px;
+            margin-bottom: 16px;
+            padding: 14px 16px;
+            background: rgba(13,34,53,0.9);
+            border-radius: 12px;
+            border-left: 4px solid #1b63ff;
+            font-size: 14px;
+            line-height: 1.5;
         }
 
-        .export-btn {
-            background: #1565c0;
-            margin-top: 10px;
-        }
-
-        .export-btn:hover {
-            background: #1a74d1;
+        .summary strong {
+            color: #ffffff;
         }
 
         .error-box {
-            background: #ffe5e5;
-            border-left: 5px solid #cc0000;
-            padding: 15px;
+            background: rgba(91, 13, 20, 0.92);
+            border-left: 4px solid #ff4c5b;
+            padding: 14px 16px;
             margin-top: 20px;
-            border-radius: 6px;
-            color: #900;
+            border-radius: 10px;
+            color: #ffe5e9;
+            font-size: 14px;
+        }
+
+        .empty-box {
+            background: rgba(16, 24, 40, 0.9);
+            border-left: 4px solid #667085;
+            padding: 14px 16px;
+            margin-top: 20px;
+            border-radius: 10px;
+            color: #e5e7eb;
+            font-size: 14px;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+
+        .toolbar-left {
+            font-size: 13px;
+            color: rgba(245,247,251,0.7);
+        }
+
+        .export-btn {
+            background: #0f9d58;
+        }
+
+        .export-btn:hover {
+            background: #15b366;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(10, 18, 30, 0.98);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+            font-size: 13px;
+        }
+
+        thead {
+            background: rgba(11, 34, 61, 1);
+        }
+
+        th, td {
+            padding: 9px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+            text-align: left;
+        }
+
+        th {
+            font-weight: 600;
+            color: #e5e7eb;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+
+        tbody tr:nth-child(even) {
+            background: rgba(15, 23, 42, 0.96);
+        }
+
+        tbody tr:hover {
+            background: rgba(30, 64, 175, 0.35);
+        }
+
+        .col-address {
+            font-weight: 500;
+            color: #f9fafb;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(15,118,110,0.16);
+            color: #a5f3fc;
+        }
+
+        .mono {
+            font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        @media (max-width: 768px) {
+            .search-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+                text-align: center;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px 8px;
+            }
         }
     </style>
 </head>
 <body>
 
-<header>Pelée AI – Address Search</header>
+<header>
+    <div>
+        <div class="title">PELÉE AI</div>
+        <div class="subtitle">AI-powered residential &amp; commercial address discovery</div>
+    </div>
+</header>
 
 <div class="container">
-
     <div class="search-box">
         <form id="searchForm">
-            <input id="query" type="text"
-                   placeholder="Try: homes in Strongsville Ohio with incomes over 300k" />
-            <button class="btn" type="submit">Search</button>
+            <div class="search-row">
+                <input
+                    id="query"
+                    type="text"
+                    placeholder="Try: homes in Strongsville Ohio with incomes over 300k"
+                    autocomplete="off"
+                />
+                <button class="btn" type="submit" id="searchBtn">Search</button>
+            </div>
+            <div class="hint">
+                <span>Examples:</span>
+                &nbsp;“addresses in Wakulla County Florida” ·
+                “homes in Teton County WY with incomes over 200k”
+            </div>
         </form>
     </div>
 
@@ -131,81 +270,174 @@
 </div>
 
 <script>
-document.getElementById("searchForm").addEventListener("submit", async function(e) {
+const form = document.getElementById("searchForm");
+const queryInput = document.getElementById("query");
+const resultsDiv = document.getElementById("results-container");
+const searchBtn = document.getElementById("searchBtn");
+
+form.addEventListener("submit", async function (e) {
     e.preventDefault();
+    const q = queryInput.value.trim();
+    if (!q) return;
 
-    const q = document.getElementById("query").value.trim();
-    const resultsDiv = document.getElementById("results-container");
-    resultsDiv.innerHTML = "<div class='summary'>Searching…</div>";
+    resultsDiv.innerHTML = `<div class="summary">Searching…</div>`;
+    searchBtn.disabled = true;
+    searchBtn.textContent = "Searching…";
 
-    const resp = await fetch("/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q })
-    });
+    try {
+        const resp = await fetch("/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
+        });
 
-    const data = await resp.json();
+        let data;
+        try {
+            data = await resp.json();
+        } catch (_) {
+            resultsDiv.innerHTML = `<div class="error-box">Search failed: invalid response from server.</div>`;
+            searchBtn.disabled = false;
+            searchBtn.textContent = "Search";
+            return;
+        }
 
-    if (!data.ok) {
-        resultsDiv.innerHTML = `<div class='error-box'>${data.error || "Unknown error"}</div>`;
-        return;
+        if (!resp.ok || data.error || data.ok === false) {
+            resultsDiv.innerHTML = `<div class="error-box">${data.error || "Search failed."}</div>`;
+            searchBtn.disabled = false;
+            searchBtn.textContent = "Search";
+            return;
+        }
+
+        renderResults(data);
+    } catch (err) {
+        console.error(err);
+        resultsDiv.innerHTML = `<div class="error-box">Network error. Please try again.</div>`;
+    } finally {
+        searchBtn.disabled = false;
+        searchBtn.textContent = "Search";
     }
+});
 
-    let summaryHtml = `
+function renderResults(data) {
+    const { query, county, state, dataset_key, total, shown, results } = data;
+
+    let html = "";
+
+    html += `
         <div class="summary">
-            <strong>Query:</strong> ${data.query}<br>
-            <strong>County:</strong> ${data.county}, ${data.state}<br>
-            <strong>Dataset:</strong> ${data.dataset_key}<br>
-            <strong>Showing:</strong> ${data.shown} of ${data.total}
+            <div><strong>Query:</strong> ${escapeHtml(query)}</div>
+            <div><strong>County:</strong> ${escapeHtml(county || "")}, ${escapeHtml(state || "")}</div>
+            <div><strong>Dataset:</strong> <span class="mono">${escapeHtml(dataset_key || "")}</span></div>
+            <div><strong>Results:</strong> Showing ${shown} of ${total}</div>
         </div>
     `;
 
-    let cards = "";
-    data.results.forEach(r => {
-        cards += `
-            <div class="result-card">
-                <div class="address">${r.address}</div>
-                <div class="meta">
-                    ${r.city}, ${r.state} ${r.zip}<br>
-                    <strong>Income:</strong> ${r.income ?? "N/A"}<br>
-                    <strong>Value:</strong> ${r.value ?? "N/A"}<br>
-                    <strong>Lat:</strong> ${r.lat ?? "—"}  
-                    &nbsp;&nbsp;
-                    <strong>Lon:</strong> ${r.lon ?? "—"}
-                </div>
+    if (!results || results.length === 0) {
+        html += `
+            <div class="empty-box">
+                No matching addresses found for that filter. Try lowering the income/value threshold
+                or checking the county/state.
             </div>
         `;
-    });
-
-    const exportButton = `
-        <button class="btn export-btn" onclick="exportResults('${encodeURIComponent(q)}')">
-            ⬇️ Export Full CSV
-        </button>
-    `;
-
-    resultsDiv.innerHTML = summaryHtml + exportButton + cards;
-});
-
-async function exportResults(q) {
-    const resp = await fetch("/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: decodeURIComponent(q) })
-    });
-
-    if (!resp.ok) {
-        alert("Export failed.");
+        resultsDiv.innerHTML = html;
         return;
     }
 
-    const blob = await resp.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "pelee_export.zip";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    html += `
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <span class="badge">TABLE VIEW</span>
+                &nbsp;Use Export to download all matches as CSV.
+            </div>
+            <button class="btn export-btn" onclick="exportResults('${encodeURIComponent(query)}')">
+                ⬇️ Export full CSV
+            </button>
+        </div>
+    `;
+
+    html += `
+        <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Address</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>ZIP</th>
+                    <th>Income</th>
+                    <th>Value</th>
+                    <th>Lat</th>
+                    <th>Lon</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    for (const r of results) {
+        html += `
+            <tr>
+                <td class="col-address">${escapeHtml(r.address || "(no address)")}</td>
+                <td>${escapeHtml(r.city || "")}</td>
+                <td>${escapeHtml(r.state || "")}</td>
+                <td>${escapeHtml(r.zip || "")}</td>
+                <td class="mono">${r.income != null ? escapeHtml(String(r.income)) : "—"}</td>
+                <td class="mono">${r.value != null ? escapeHtml(String(r.value)) : "—"}</td>
+                <td class="mono">${r.lat != null ? escapeHtml(String(r.lat)) : "—"}</td>
+                <td class="mono">${r.lon != null ? escapeHtml(String(r.lon)) : "—"}</td>
+            </tr>
+        `;
+    }
+
+    html += `
+            </tbody>
+        </table>
+        </div>
+    `;
+
+    resultsDiv.innerHTML = html;
+}
+
+async function exportResults(qEnc) {
+    const q = decodeURIComponent(qEnc);
+    try {
+        const resp = await fetch("/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
+        });
+
+        if (!resp.ok) {
+            let msg = "Export failed.";
+            try {
+                const data = await resp.json();
+                if (data.error) msg = data.error;
+            } catch (_) {}
+            alert(msg);
+            return;
+        }
+
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "pelee_export.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error(err);
+        alert("Export error. Please try again.");
+    }
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 </script>
 
