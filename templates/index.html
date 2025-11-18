@@ -2,444 +2,122 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Pelée | AI Address Search</title>
+    <title>Pelée | Login</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
     <style>
         body {
             margin: 0;
-            padding: 0;
-            font-family: Inter, Arial, sans-serif;
-            background: #050b12;
-            color: #f5f7fb;
-        }
-
-        header {
-            padding: 24px 30px;
-            background: linear-gradient(135deg, #050b12, #061c34);
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            min-height: 100vh;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: center;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif;
+            background: radial-gradient(circle at top, #0f172a 0, #020617 55%, #000 100%);
+            color: #e5e7eb;
         }
-
-        header .title {
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        header .subtitle {
-            font-size: 13px;
-            opacity: 0.7;
-            margin-top: 4px;
-        }
-
-        .container {
+        .card {
             width: 100%;
-            max-width: 1100px;
-            margin: 26px auto 40px;
-            padding: 0 20px;
+            max-width: 360px;
+            padding: 26px 22px 22px;
+            border-radius: 18px;
+            background: rgba(15, 23, 42, 0.96);
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            box-shadow:
+                0 24px 60px rgba(0,0,0,0.8),
+                0 0 0 1px rgba(255,255,255,0.02);
         }
-
-        .search-box {
-            background: rgba(9, 19, 35, 0.95);
-            padding: 22px 22px 18px;
-            border-radius: 16px;
-            box-shadow: 0 18px 45px rgba(0,0,0,0.45);
-            border: 1px solid rgba(255,255,255,0.06);
-        }
-
-        .search-row {
+        .logo-row {
             display: flex;
-            gap: 10px;
             align-items: center;
+            gap: 9px;
+            margin-bottom: 12px;
         }
-
-        .search-box input {
-            flex: 1;
-            padding: 13px 14px;
-            font-size: 16px;
+        .logo-dot {
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #fff, #35c4ff);
+            box-shadow: 0 0 16px rgba(53, 196, 255, 0.9);
+        }
+        .logo-text {
+            font-size: 18px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            color: #e5edff;
+        }
+        .title {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .subtitle {
+            font-size: 13px;
+            color: #9ca3af;
+            margin-bottom: 18px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 10px 11px;
             border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.14);
-            background: rgba(4,10,18,0.95);
-            color: #f5f7fb;
+            border: 1px solid rgba(148, 163, 184, 0.7);
+            background: rgba(15,23,42,0.95);
+            color: #e5e7eb;
             outline: none;
         }
-
-        .search-box input::placeholder {
-            color: rgba(245,247,251,0.45);
+        input[type="password"]:focus {
+            border-color: #35c4ff;
+            box-shadow: 0 0 0 1px rgba(53, 196, 255, 0.7);
         }
-
         .btn {
-            padding: 12px 20px;
-            background: #1b63ff;
-            color: white;
-            border: none;
-            font-size: 15px;
-            border-radius: 10px;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        .btn:hover {
-            background: #295fff;
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: default;
-        }
-
-        .hint {
-            margin-top: 8px;
-            font-size: 13px;
-            color: rgba(245,247,251,0.65);
-        }
-
-        .hint span {
-            opacity: 0.6;
-        }
-
-        #results-container {
-            margin-top: 26px;
-        }
-
-        .summary {
-            margin-bottom: 16px;
-            padding: 14px 16px;
-            background: rgba(13,34,53,0.9);
-            border-radius: 12px;
-            border-left: 4px solid #1b63ff;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-
-        .summary strong {
-            color: #ffffff;
-        }
-
-        .error-box {
-            background: rgba(91, 13, 20, 0.92);
-            border-left: 4px solid #ff4c5b;
-            padding: 14px 16px;
-            margin-top: 20px;
-            border-radius: 10px;
-            color: #ffe5e9;
-            font-size: 14px;
-        }
-
-        .empty-box {
-            background: rgba(16, 24, 40, 0.9);
-            border-left: 4px solid #667085;
-            padding: 14px 16px;
-            margin-top: 20px;
-            border-radius: 10px;
-            color: #e5e7eb;
-            font-size: 14px;
-        }
-
-        .toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-            gap: 10px;
-        }
-
-        .toolbar-left {
-            font-size: 13px;
-            color: rgba(245,247,251,0.7);
-        }
-
-        .export-btn {
-            background: #0f9d58;
-        }
-
-        .export-btn:hover {
-            background: #15b366;
-        }
-
-        table {
+            margin-top: 14px;
             width: 100%;
-            border-collapse: collapse;
-            background: rgba(10, 18, 30, 0.98);
-            border-radius: 14px;
-            overflow: hidden;
-            box-shadow: 0 16px 40px rgba(0,0,0,0.5);
-            font-size: 13px;
-        }
-
-        thead {
-            background: rgba(11, 34, 61, 1);
-        }
-
-        th, td {
-            padding: 9px 12px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-            text-align: left;
-        }
-
-        th {
+            padding: 10px 0;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #35c4ff, #6dfcef);
+            border: none;
+            color: #020617;
             font-weight: 600;
-            color: #e5e7eb;
-            letter-spacing: 0.03em;
-            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .error {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #fecaca;
+        }
+        .hint {
+            margin-top: 10px;
             font-size: 11px;
-        }
-
-        tbody tr:nth-child(even) {
-            background: rgba(15, 23, 42, 0.96);
-        }
-
-        tbody tr:hover {
-            background: rgba(30, 64, 175, 0.35);
-        }
-
-        .col-address {
-            font-weight: 500;
-            color: #f9fafb;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 999px;
-            font-size: 11px;
-            background: rgba(15,118,110,0.16);
-            color: #a5f3fc;
-        }
-
-        .mono {
-            font-family: "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        }
-
-        @media (max-width: 768px) {
-            .search-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .btn {
-                width: 100%;
-                justify-content: center;
-                text-align: center;
-            }
-
-            table {
-                font-size: 12px;
-            }
-
-            th, td {
-                padding: 8px 8px;
-            }
+            color: #9ca3af;
         }
     </style>
 </head>
 <body>
-
-<header>
-    <div>
-        <div class="title">PELÉE AI</div>
-        <div class="subtitle">AI-powered residential &amp; commercial address discovery</div>
+<div class="card">
+    <div class="logo-row">
+        <div class="logo-dot"></div>
+        <div class="logo-text">PELÉE</div>
     </div>
-</header>
-
-<div class="container">
-    <div class="search-box">
-        <form id="searchForm">
-            <div class="search-row">
-                <input
-                    id="query"
-                    type="text"
-                    placeholder="Try: homes in Strongsville Ohio with incomes over 300k"
-                    autocomplete="off"
-                />
-                <button class="btn" type="submit" id="searchBtn">Search</button>
-            </div>
-            <div class="hint">
-                <span>Examples:</span>
-                &nbsp;“addresses in Wakulla County Florida” ·
-                “homes in Teton County WY with incomes over 200k”
-            </div>
-        </form>
+    <div class="title">Private Demo Login</div>
+    <div class="subtitle">
+        Enter the access password to use Pelée AI Address Search.
     </div>
 
-    <div id="results-container"></div>
+    <form method="POST">
+        <label for="password">Password</label>
+        <input id="password" type="password" name="password" autofocus />
+
+        <button class="btn" type="submit">Continue</button>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+        <div class="hint">Password is configured via <code>PELEE_PASSWORD</code> (defaults to <code>CaLuna</code>).</div>
+    </form>
 </div>
-
-<script>
-const form = document.getElementById("searchForm");
-const queryInput = document.getElementById("query");
-const resultsDiv = document.getElementById("results-container");
-const searchBtn = document.getElementById("searchBtn");
-
-form.addEventListener("submit", async function (e) {
-    e.preventDefault();
-    const q = queryInput.value.trim();
-    if (!q) return;
-
-    resultsDiv.innerHTML = `<div class="summary">Searching…</div>`;
-    searchBtn.disabled = true;
-    searchBtn.textContent = "Searching…";
-
-    try {
-        const resp = await fetch("/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q })
-        });
-
-        let data;
-        try {
-            data = await resp.json();
-        } catch (_) {
-            resultsDiv.innerHTML = `<div class="error-box">Search failed: invalid response from server.</div>`;
-            searchBtn.disabled = false;
-            searchBtn.textContent = "Search";
-            return;
-        }
-
-        if (!resp.ok || data.error || data.ok === false) {
-            resultsDiv.innerHTML = `<div class="error-box">${data.error || "Search failed."}</div>`;
-            searchBtn.disabled = false;
-            searchBtn.textContent = "Search";
-            return;
-        }
-
-        renderResults(data);
-    } catch (err) {
-        console.error(err);
-        resultsDiv.innerHTML = `<div class="error-box">Network error. Please try again.</div>`;
-    } finally {
-        searchBtn.disabled = false;
-        searchBtn.textContent = "Search";
-    }
-});
-
-function renderResults(data) {
-    const { query, county, state, dataset_key, total, shown, results } = data;
-
-    let html = "";
-
-    html += `
-        <div class="summary">
-            <div><strong>Query:</strong> ${escapeHtml(query)}</div>
-            <div><strong>County:</strong> ${escapeHtml(county || "")}, ${escapeHtml(state || "")}</div>
-            <div><strong>Dataset:</strong> <span class="mono">${escapeHtml(dataset_key || "")}</span></div>
-            <div><strong>Results:</strong> Showing ${shown} of ${total}</div>
-        </div>
-    `;
-
-    if (!results || results.length === 0) {
-        html += `
-            <div class="empty-box">
-                No matching addresses found for that filter. Try lowering the income/value threshold
-                or checking the county/state.
-            </div>
-        `;
-        resultsDiv.innerHTML = html;
-        return;
-    }
-
-    html += `
-        <div class="toolbar">
-            <div class="toolbar-left">
-                <span class="badge">TABLE VIEW</span>
-                &nbsp;Use Export to download all matches as CSV.
-            </div>
-            <button class="btn export-btn" onclick="exportResults('${encodeURIComponent(query)}')">
-                ⬇️ Export full CSV
-            </button>
-        </div>
-    `;
-
-    html += `
-        <div style="overflow-x:auto;">
-        <table>
-            <thead>
-                <tr>
-                    <th>Address</th>
-                    <th>City</th>
-                    <th>State</th>
-                    <th>ZIP</th>
-                    <th>Income</th>
-                    <th>Value</th>
-                    <th>Lat</th>
-                    <th>Lon</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-
-    for (const r of results) {
-        html += `
-            <tr>
-                <td class="col-address">${escapeHtml(r.address || "(no address)")}</td>
-                <td>${escapeHtml(r.city || "")}</td>
-                <td>${escapeHtml(r.state || "")}</td>
-                <td>${escapeHtml(r.zip || "")}</td>
-                <td class="mono">${r.income != null ? escapeHtml(String(r.income)) : "—"}</td>
-                <td class="mono">${r.value != null ? escapeHtml(String(r.value)) : "—"}</td>
-                <td class="mono">${r.lat != null ? escapeHtml(String(r.lat)) : "—"}</td>
-                <td class="mono">${r.lon != null ? escapeHtml(String(r.lon)) : "—"}</td>
-            </tr>
-        `;
-    }
-
-    html += `
-            </tbody>
-        </table>
-        </div>
-    `;
-
-    resultsDiv.innerHTML = html;
-}
-
-async function exportResults(qEnc) {
-    const q = decodeURIComponent(qEnc);
-    try {
-        const resp = await fetch("/export", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q })
-        });
-
-        if (!resp.ok) {
-            let msg = "Export failed.";
-            try {
-                const data = await resp.json();
-                if (data.error) msg = data.error;
-            } catch (_) {}
-            alert(msg);
-            return;
-        }
-
-        const blob = await resp.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "pelee_export.zip";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-    } catch (err) {
-        console.error(err);
-        alert("Export error. Please try again.");
-    }
-}
-
-function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-</script>
-
 </body>
 </html>
