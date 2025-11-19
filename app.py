@@ -1,758 +1,501 @@
-import os
-import io
-import json
-import csv
-import zipfile
-import re
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>PELÉE AI | Address Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-from flask import (
-    Flask,
-    render_template,
-    request,
-    jsonify,
-    redirect,
-    url_for,
-    session,
-    send_file,
-)
-import boto3
-from botocore.exceptions import ClientError
-from dotenv import load_dotenv
-
-# ----------------- CONFIG -----------------
-
-load_dotenv()
-
-SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
-PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
-
-AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-2"))
-S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
-
-# per-county enriched files like: merged_with_tracts_acs/fl/wakulla-with-values-income.geojson
-S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts_acs")
-
-# how many address rows to show in UI
-MAX_RESULTS = 500
-
-app = Flask(__name__)
-app.secret_key = SECRET_KEY
-
-s3_client = boto3.client("s3", region_name=AWS_REGION)
-
-# in-memory cache of S3 keys by state
-_STATE_KEYS_CACHE = {}
-
-# ----------------- LOOKUP TABLES -----------------
-
-US_STATES = {
-    "alabama": "al",
-    "alaska": "ak",
-    "arizona": "az",
-    "arkansas": "ar",
-    "california": "ca",
-    "colorado": "co",
-    "connecticut": "ct",
-    "delaware": "de",
-    "florida": "fl",
-    "georgia": "ga",
-    "hawaii": "hi",
-    "idaho": "id",
-    "illinois": "il",
-    "indiana": "in",
-    "iowa": "ia",
-    "kansas": "ks",
-    "kentucky": "ky",
-    "louisiana": "la",
-    "maine": "me",
-    "maryland": "md",
-    "massachusetts": "ma",
-    "michigan": "mi",
-    "minnesota": "mn",
-    "mississippi": "ms",
-    "missouri": "mo",
-    "montana": "mt",
-    "nebraska": "ne",
-    "nevada": "nv",
-    "new hampshire": "nh",
-    "new jersey": "nj",
-    "new mexico": "nm",
-    "new york": "ny",
-    "north carolina": "nc",
-    "north dakota": "nd",
-    "ohio": "oh",
-    "oklahoma": "ok",
-    "oregon": "or",
-    "pennsylvania": "pa",
-    "rhode island": "ri",
-    "south carolina": "sc",
-    "south dakota": "sd",
-    "tennessee": "tn",
-    "texas": "tx",
-    "utah": "ut",
-    "vermont": "vt",
-    "virginia": "va",
-    "washington": "wa",
-    "west virginia": "wv",
-    "wisconsin": "wi",
-    "wyoming": "wy",
-}
-
-# allow detection of 2-letter codes like "fl", "oh", "tx"
-STATE_CODES = {v: v for v in US_STATES.values()}
-
-# minimal ZIP → (STATE, COUNTY) mapping for what you’ve tested so far
-ZIP_TO_STATE_COUNTY = {
-    # Rocky River / ZIP 44116
-    "44116": ("OH", "cuyahoga"),
-    # add more as needed
-}
-
-# minimal city → county mapping for things like Vancouver, WA
-CITY_TO_COUNTY = {
-    "wa": {
-        # city name (lowercase) -> (county_name, Pretty City Name)
-        "vancouver": ("clark", "Vancouver"),
-    },
-    # you can add more states / cities over time
-    # "oh": {"berea": ("cuyahoga", "Berea"), "strongsville": ("cuyahoga", "Strongsville")},
-}
-
-
-# ----------------- UTILITIES -----------------
-
-
-def normalize_text(s: str) -> str:
-    return " ".join((s or "").strip().lower().split())
-
-
-def normalize_city(s: str) -> str:
-    return normalize_text(s)
-
-
-def canonicalize_county_name(name: str) -> str:
-    """
-    normalize "Wakulla", "Wakulla County" etc → "wakulla"
-    """
-    if not name:
-        return ""
-    s = name.lower().replace("_", " ").replace("-", " ")
-    for word in [" county", " parish"]:
-        if word in s:
-            s = s.replace(word, "")
-    return " ".join(s.split())
-
-
-def detect_state(q: str):
-    """
-    Try to detect a 2-letter state or full state name from the query.
-    NO AI here; purely deterministic.
-    """
-    q = (q or "").lower()
-    tokens = q.split()
-
-    # look for 2-letter codes first (tx, oh, fl, etc.)
-    for t in tokens:
-        t_clean = t.strip(",.").lower()
-        # don't treat the word "in" as Indiana
-        if t_clean == "in":
-            continue
-        if t_clean in STATE_CODES:
-            return t_clean.upper()
-
-    # look for full names like "florida", "washington"
-    for name, code in US_STATES.items():
-        if name in q:
-            return code.upper()
-
-    return None
-
-
-def extract_zip(query: str):
-    """
-    Return the first 5-digit ZIP code found, or None.
-    """
-    m = re.search(r"\b(\d{5})\b", query or "")
-    return m.group(1) if m else None
-
-
-def parse_numeric_filters(query: str):
-    """
-    Extract simple 'over X' / 'above X' for incomes or values.
-    """
-    q = (query or "").lower()
-    income_min = None
-    value_min = None
-
-    tokens = q.replace("$", "").replace(",", "").split()
-    for i, t in enumerate(tokens):
-        if t in {"over", "above"} and i + 1 < len(tokens):
-            raw = tokens[i + 1].strip(".,)")
-            mult = 1
-            if raw.endswith("k"):
-                mult = 1000
-                raw = raw[:-1]
-            elif raw.endswith("m"):
-                mult = 1_000_000
-                raw = raw[:-1]
-
-            try:
-                num = float(raw) * mult
-            except ValueError:
-                continue
-
-            window = " ".join(tokens[max(0, i - 3): i + 6])
-            if any(x in window for x in ["income", "household"]):
-                income_min = num
-            elif any(x in window for x in ["value", "home", "homes", "properties"]):
-                value_min = num
-            else:
-                # default to income if ambiguous
-                if income_min is None:
-                    income_min = num
-
-    return income_min, value_min
-
-
-def parse_location_and_filters(query: str):
-    """
-    Purely deterministic parsing of state, county, city, ZIP and income/value filters.
-
-    Supports examples like:
-      - "addresses in Wakulla County Florida"
-      - "ZIP 44116 residential addresses"
-      - "addresses in vancouver wa"
-      - "homes in Strongsville Ohio with incomes over 300k"
-      - "Give me residential addresses in Harris County TX"
-    """
-    raw = query or ""
-    q = normalize_text(raw)
-    tokens = q.split()
-
-    # numeric filters
-    income_min, value_min = parse_numeric_filters(raw)
-
-    # 1) ZIP detection
-    zip_code = extract_zip(raw)
-    state = detect_state(q)
-    county = None
-    city = None
-
-    # ZIP -> state + county if we know it
-    if zip_code and zip_code in ZIP_TO_STATE_COUNTY:
-        zip_state, zip_county = ZIP_TO_STATE_COUNTY[zip_code]
-        if not state:
-            state = zip_state
-        county = zip_county
-
-    # 2) County by "X County" pattern
-    if "county" in tokens:
-        idx = tokens.index("county")
-        j = idx - 1
-        STOP = {
-            "in",
-            "of",
-            "all",
-            "any",
-            "properties",
-            "homes",
-            "households",
-            "residential",
-            "addresses",
-            "parcels",
+    <style>
+        :root {
+            --bg: #050816;
+            --card: #0b1220;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.18);
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --danger: #f97373;
         }
-        county_tokens_rev = []
-        while j >= 0:
-            t = tokens[j]
-            if t in STOP:
-                break
-            county_tokens_rev.append(t)
-            j -= 1
-        county_tokens = list(reversed(county_tokens_rev))
-        if county_tokens:
-            county = " ".join(county_tokens)
 
-    # 3) Generic city detection: "<City> <ST>"
-    # Works for things like "Berea OH", "Vancouver WA", "Strongsville Ohio"
-    if state:
-        state_token_positions = []
-        state_lc = state.lower()
-        full_state_name = None
-        for name, code in US_STATES.items():
-            if code.upper() == state:
-                full_state_name = name
-                break
+        * {
+            box-sizing: border-box;
+        }
 
-        for i, t in enumerate(tokens):
-            t_clean = t.strip(",.")
-            if t_clean == state_lc or (full_state_name and t_clean == full_state_name):
-                state_token_positions.append(i)
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            background: radial-gradient(circle at top, #111827 0, #020617 55%, #000 100%);
+            color: var(--text-main);
+        }
 
-        if state_token_positions:
-            idx = state_token_positions[0]
-            j = idx - 1
-            STOP = {"in", "of", full_state_name or "", state_lc}
-            city_tokens_rev = []
-            while j >= 0 and tokens[j] not in STOP:
-                city_tokens_rev.append(tokens[j])
-                j -= 1
-            city_tokens = list(reversed(city_tokens_rev))
-            if city_tokens and not city:
-                city = " ".join(city_tokens)
+        header {
+            padding: 18px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            backdrop-filter: blur(16px);
+            background: linear-gradient(to right, rgba(15,23,42,0.9), rgba(15,23,42,0.7));
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
 
-    # 4) Ohio special-case: if we have a city and state == OH but no county → assume Cuyahoga
-    if state == "OH" and city and not county:
-        county = "cuyahoga"
+        .logo {
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: 0.08em;
+        }
 
-    # 5) City → County mapping for things like Vancouver, WA
-    if state:
-        st_key = state.lower()
-        city_map = CITY_TO_COUNTY.get(st_key, {})
-        for city_name, (city_county, pretty_city) in city_map.items():
-            if city_name in q:
-                if not county:
-                    county = city_county
-                if not city:
-                    city = pretty_city
-                break
+        .logo span {
+            color: var(--accent);
+        }
 
-    return state, county, city, zip_code, income_min, value_min
+        .header-right a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            opacity: 0.8;
+        }
 
+        .header-right a:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
 
-def list_state_keys(state: str):
-    """
-    Return all GeoJSON keys under S3_PREFIX/<state>/, cached in memory.
-    """
-    state = (state or "").lower()
-    if not state:
-        return []
+        .container {
+            max-width: 960px;
+            margin: 40px auto 60px;
+            padding: 0 16px;
+        }
 
-    if state in _STATE_KEYS_CACHE:
-        return _STATE_KEYS_CACHE[state]
+        .hero {
+            text-align: left;
+            margin-bottom: 24px;
+        }
 
-    prefix = f"{S3_PREFIX}/{state}/"
-    keys = []
-    token = None
+        .hero-title {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
 
-    while True:
-        kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
-        if token:
-            kwargs["ContinuationToken"] = token
+        .hero-subtitle {
+            font-size: 16px;
+            color: var(--text-muted);
+        }
 
-        try:
-            resp = s3_client.list_objects_v2(**kwargs)
-        except ClientError as e:
-            app.logger.error(f"[S3] list_objects_v2 failed for state={state}: {e}")
-            break
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(15,23,42,0.9);
+            border: 1px solid rgba(148,163,184,0.45);
+            margin-bottom: 10px;
+            color: var(--text-muted);
+        }
 
-        for obj in resp.get("Contents", []):
-            key = obj.get("Key")
-            if key and key.endswith(".geojson"):
-                keys.append(key)
+        .pill-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: #22c55e;
+        }
 
-        if resp.get("IsTruncated"):
-            token = resp.get("NextContinuationToken")
-        else:
-            break
+        .search-card {
+            background: radial-gradient(circle at top left, rgba(56,189,248,0.12), transparent 60%),
+                        linear-gradient(to bottom right, rgba(15,23,42,0.96), rgba(15,23,42,0.98));
+            border-radius: 18px;
+            padding: 20px 20px 18px;
+            border: 1px solid rgba(148,163,184,0.3);
+            box-shadow: 0 18px 60px rgba(15,23,42,0.8);
+        }
 
-    _STATE_KEYS_CACHE[state] = keys
-    app.logger.info(f"[S3] Cached {len(keys)} keys for state={state}")
-    return keys
+        .search-form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
 
+        .search-input {
+            flex: 1 1 220px;
+            background: rgba(15,23,42,0.9);
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.7);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
 
-def resolve_dataset_key(state: str, county: str):
-    """
-    Given state code (e.g., 'FL') and county name (e.g., 'Wakulla'),
-    pick the best matching S3 key.
+        .search-input input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 15px;
+        }
 
-    Preference:
-      1) exact county + '-with-values-income'
-      2) exact county + '.geojson'
-      3) fuzzy with '-with-values-income'
-      4) fuzzy raw '.geojson'
-    """
-    if not state or not county:
-        return None
+        .search-input input::placeholder {
+            color: rgba(148,163,184,0.9);
+        }
 
-    state = state.lower()
-    county_clean = canonicalize_county_name(county)
+        .search-button {
+            border-radius: 999px;
+            border: none;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: linear-gradient(to right, #0ea5e9, #22c55e);
+            color: #0b1120;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
 
-    keys = list_state_keys(state)
-    if not keys:
-        return None
+        .search-button:hover {
+            filter: brightness(1.05);
+        }
 
-    enriched_exact = []
-    raw_exact = []
-    enriched_fuzzy = []
-    raw_fuzzy = []
+        .examples {
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
 
-    for key in keys:
-        fname = key.split("/")[-1]
-        if not fname.endswith(".geojson"):
-            continue
-        base = fname[:-len(".geojson")]
-        enriched = "with-values-income" in base
-        base_no_suffix = base.replace("-with-values-income", "")
-        base_canon = canonicalize_county_name(base_no_suffix)
+        .examples span {
+            color: var(--text-main);
+        }
 
-        if base_canon == county_clean:
-            (enriched_exact if enriched else raw_exact).append(key)
-        elif base_canon.startswith(county_clean) or county_clean.startswith(base_canon):
-            (enriched_fuzzy if enriched else raw_fuzzy).append(key)
+        .results-wrap {
+            margin-top: 28px;
+        }
 
-    for bucket in (enriched_exact, raw_exact, enriched_fuzzy, raw_fuzzy):
-        if bucket:
-            return sorted(bucket, key=len)[0]
+        .summary {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(148,163,184,0.4);
+            background: radial-gradient(circle at top left, var(--accent-soft), rgba(15,23,42,0.96));
+            font-size: 13px;
+            line-height: 1.6;
+        }
 
-    return None
+        .summary strong {
+            color: var(--accent);
+        }
 
+        .error-box {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(248,113,113,0.7);
+            background: rgba(127,29,29,0.65);
+            color: #fecaca;
+            font-size: 13px;
+            margin-top: 12px;
+        }
 
-def load_geojson_from_s3(key: str):
-    """
-    Simple S3 load: read the whole object and json.loads it.
-    """
-    try:
-        resp = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
-        body = resp["Body"].read()
-        return json.loads(body)
-    except Exception as e:
-        app.logger.error(f"[S3] load failed for {key}: {e}")
-        raise
+        .export-row {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
 
+        .export-btn {
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.6);
+            padding: 7px 12px;
+            font-size: 12px;
+            background: rgba(15,23,42,0.9);
+            color: var(--accent);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
 
-def filter_features(features, income_min=None, value_min=None, zip_code=None, city_name=None):
-    """
-    Filter by income, value, optional ZIP, and optional city.
+        .export-btn:hover {
+            background: rgba(15,23,42,1);
+        }
 
-    - ZIP filter: exact match on postcode
-    - City filter: exact match on normalized city string, if provided
-    """
-    if (
-        income_min is None
-        and value_min is None
-        and not zip_code
-        and not city_name
-    ):
-        return features
+        .results-list {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
 
-    income_keys = ["DP03_0062E", "median_income", "income", "household_income"]
-    value_keys = ["DP04_0089E", "median_value", "home_value", "value"]
+        @media (min-width: 800px) {
+            .results-list {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
 
-    city_norm = normalize_city(city_name) if city_name else None
+        .result-card {
+            background: linear-gradient(to bottom right, #020617, #020617);
+            border-radius: 12px;
+            padding: 12px 12px 11px;
+            border: 1px solid rgba(148,163,184,0.3);
+            box-shadow: 0 10px 30px rgba(15,23,42,0.8);
+            font-size: 13px;
+            line-height: 1.5;
+        }
 
-    def read_val(props, keys):
-        for k in keys:
-            if k in props and props[k] not in ("", None):
-                try:
-                    return float(props[k])
-                except Exception:
-                    pass
-        return None
+        .result-address {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
 
-    out = []
-    for f in features:
-        p = f.get("properties", {})
-        keep = True
+        .result-meta {
+            color: var(--text-muted);
+        }
 
-        # ZIP filter
-        if zip_code is not None:
-            pc = str(p.get("postcode") or "").strip()
-            if pc != zip_code:
-                keep = False
+        .pill-badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(15,23,42,0.9);
+            border: 1px solid rgba(148,163,184,0.7);
+            margin-right: 6px;
+            margin-top: 4px;
+        }
 
-        # City filter (only if we have a city name and no explicit ZIP filter)
-        if keep and city_norm and zip_code is None:
-            feat_city_norm = normalize_city(p.get("city") or "")
-            if feat_city_norm != city_norm:
-                keep = False
+        .loading {
+            opacity: 0.85;
+        }
+    </style>
+</head>
+<body>
 
-        if keep and income_min is not None:
-            v = read_val(p, income_keys)
-            if v is None or v < income_min:
-                keep = False
+<header>
+    <div class="logo"><span>PELÉE</span> AI</div>
+    <div class="header-right">
+        <a href="/logout">Logout</a>
+    </div>
+</header>
 
-        if keep and value_min is not None:
-            v = read_val(p, value_keys)
-            if v is None or v < value_min:
-                keep = False
+<div class="container">
+    <div class="hero">
+        <div class="pill">
+            <span class="pill-dot"></span>
+            Internal Data Tool · Residential + Commercial
+        </div>
+        <div class="hero-title">AI-powered address discovery</div>
+        <div class="hero-subtitle">
+            Pull targeted addresses by county, city, ZIP, income bands, and home values in one natural-language query.
+        </div>
+    </div>
 
-        if keep:
-            out.append(f)
+    <div class="search-card">
+        <form id="searchForm" class="search-form">
+            <div class="search-input">
+                <span>🔍</span>
+                <input
+                    id="query"
+                    type="text"
+                    placeholder="e.g. homes in Strongsville Ohio with incomes over 150k"
+                    autocomplete="off"
+                />
+            </div>
+            <button class="search-button" type="submit">
+                <span>Search</span> ⏎
+            </button>
+        </form>
 
-    return out
+        <div class="examples">
+            Examples:
+            <span>“addresses in Wakulla County Florida”</span> ·
+            <span>“homes in Teton County WY with incomes over 200k”</span> ·
+            <span>“ZIP 44116 residential addresses”</span>
+        </div>
 
+        <div id="results-container" class="results-wrap"></div>
+    </div>
+</div>
 
-def feature_to_address_obj(feat):
-    """
-    Convert a GeoJSON feature into the object your front-end expects.
-    """
-    props = feat.get("properties", {})
-    geom = feat.get("geometry", {}) or {}
-    coords = geom.get("coordinates") or [None, None]
+<script>
+const form = document.getElementById("searchForm");
+const queryInput = document.getElementById("query");
+const resultsDiv = document.getElementById("results-container");
 
-    number = props.get("number") or props.get("house_number") or ""
-    street = props.get("street") or props.get("road") or ""
-    unit = props.get("unit") or ""
+function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
 
-    city = props.get("city") or ""
-    region = props.get("region") or props.get("STUSPS") or ""
-    postcode = props.get("postcode") or ""
+form.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-    income = (
-        props.get("DP03_0062E")
-        or props.get("median_income")
-        or props.get("income")
-    )
-    value = (
-        props.get("DP04_0089E")
-        or props.get("median_value")
-        or props.get("home_value")
-        or props.get("value")
-    )
-
-    return {
-        "address": " ".join(x for x in [str(number), street, unit] if x),
-        "city": city,
-        "state": region,
-        "zip": postcode,
-        "income": income,
-        "value": value,
-        "lat": coords[1],
-        "lon": coords[0],
+    const q = (queryInput.value || "").trim();
+    if (!q) {
+        resultsDiv.innerHTML = "<div class='error-box'>Please enter a query.</div>";
+        return;
     }
 
+    resultsDiv.innerHTML = `
+        <div class="summary loading">
+            Searching…<br>
+            <span style="color: var(--text-muted); font-size: 12px;">(${escapeHtml(q)})</span>
+        </div>
+    `;
 
-# ----------------- ROUTES -----------------
+    try {
+        const resp = await fetch("/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
+        });
 
+        if (!resp.ok) {
+            const text = await resp.text();
+            resultsDiv.innerHTML = `
+                <div class="error-box">
+                    Server error (${resp.status}).<br>
+                    <div style="opacity:0.8; margin-top:4px; font-size:11px;">${escapeHtml(text || "No details provided.")}</div>
+                </div>
+            `;
+            return;
+        }
 
-@app.route("/health")
-def health():
-    return jsonify({"ok": True})
+        const data = await resp.json();
 
+        if (data.error) {
+            resultsDiv.innerHTML = `<div class="error-box">${escapeHtml(data.error)}</div>`;
+            return;
+        }
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        pw = request.form.get("password", "")
-        if pw == PASSWORD:
-            session["authed"] = True
-            return redirect(url_for("index"))
-        return render_template("login.html", error="Invalid password.")
-    return render_template("login.html")
+        renderResults(q, data);
+    } catch (err) {
+        resultsDiv.innerHTML = `
+            <div class="error-box">
+                Network or server error. Try again.<br>
+                <div style="opacity:0.8; margin-top:4px; font-size:11px;">${escapeHtml(err)}</div>
+            </div>
+        `;
+    }
+});
 
+function renderResults(query, data) {
+    const hasResults = (data.results || []).length > 0;
 
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
+    const locationParts = [];
+    if (data.city) locationParts.push(data.city);
+    if (data.county) locationParts.push(capitalize(data.county) + " County");
+    if (data.state) locationParts.push(data.state);
 
+    const locationStr = locationParts.length ? locationParts.join(", ") : "—";
 
-@app.route("/")
-def index():
-    if not session.get("authed"):
-        return redirect(url_for("login"))
-    return render_template("index.html")
+    const messageLine = data.message
+        ? `<br><span style="color: var(--text-muted); font-size: 12px;">${escapeHtml(data.message)}</span>`
+        : "";
 
+    const summaryHtml = `
+        <div class="summary">
+            <strong>Query</strong>: ${escapeHtml(data.query)}<br>
+            <strong>Location</strong>: ${escapeHtml(locationStr)}<br>
+            <strong>Dataset</strong>: <span style="color:#cbd5f5">${escapeHtml(data.dataset_key || "n/a")}</span><br>
+            <strong>Results</strong>: Showing ${data.shown || 0} of ${data.total || 0}
+            ${messageLine}
+        </div>
+    `;
 
-@app.route("/search", methods=["POST"])
-def search():
-    if not session.get("authed"):
-        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    let exportHtml = "";
+    if (hasResults) {
+        exportHtml = `
+            <div class="export-row">
+                <button class="export-btn" onclick="exportResults('${encodeURIComponent(query)}')">
+                    ⬇️ Export full CSV
+                </button>
+            </div>
+        `;
+    }
 
-    try:
-        if request.is_json:
-            data = request.get_json(silent=True) or {}
-            query = (data.get("query") or "").strip()
-        else:
-            query = (request.form.get("query") or "").strip()
+    let cards = "";
+    if (hasResults) {
+        cards = data.results.map((r) => {
+            const addr = r.address || "";
+            const city = r.city || "";
+            const st = r.state || "";
+            const zip = r.zip || "";
+            const income = r.income ?? "N/A";
+            const value = r.value ?? "N/A";
+            const lat = (r.lat !== null && r.lat !== undefined) ? r.lat : "—";
+            const lon = (r.lon !== null && r.lon !== undefined) ? r.lon : "—";
 
-        if not query:
-            return jsonify({"ok": False, "error": "Please enter a query."})
+            return `
+                <div class="result-card">
+                    <div class="result-address">${escapeHtml(addr)}</div>
+                    <div class="result-meta">
+                        ${escapeHtml(city)}${city ? ", " : ""}${escapeHtml(st)}${zip ? " " + escapeHtml(zip) : ""}
+                    </div>
+                    <div class="result-meta">
+                        <span class="pill-badge">Income: ${escapeHtml(income)}</span>
+                        <span class="pill-badge">Value: ${escapeHtml(value)}</span>
+                    </div>
+                    <div class="result-meta" style="margin-top:4px;">
+                        Lat: ${escapeHtml(lat)} · Lon: ${escapeHtml(lon)}
+                    </div>
+                </div>
+            `;
+        }).join("");
+    } else {
+        cards = `
+            <div class="error-box" style="margin-top:12px;">
+                No matching addresses found for that filter.<br>
+                Try lowering the income/value threshold or adjusting the city / county / ZIP.
+            </div>
+        `;
+    }
 
-        (
-            state,
-            county,
-            city,
-            zip_code,
-            income_min,
-            value_min,
-        ) = parse_location_and_filters(query)
+    resultsDiv.innerHTML = summaryHtml + exportHtml + `<div class="results-list">${cards}</div>`;
+}
 
-        app.logger.info(
-            f"[search] query={query!r} → state={state}, county={county}, city={city}, zip={zip_code}, "
-            f"income_min={income_min}, value_min={value_min}"
-        )
+async function exportResults(qEncoded) {
+    const q = decodeURIComponent(qEncoded);
+    try {
+        const resp = await fetch("/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
+        });
 
-        if not state:
-            return jsonify({"ok": False, "error": "No state detected."})
-        if not county:
-            return jsonify({"ok": False, "error": "No county detected."})
+        if (!resp.ok) {
+            alert("Export failed (" + resp.status + ").");
+            return;
+        }
 
-        key = resolve_dataset_key(state, county)
-        app.logger.info(f"[search] resolved dataset_key={key}")
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "pelee_export.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        alert("Export failed: " + err);
+    }
+}
 
-        if not key:
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": f"No dataset found for {county} County, {state}.",
-                }
-            )
+function capitalize(s) {
+    if (!s) return "";
+    s = String(s);
+    return s.charAt(0).toUpperCase() + s.slice(1);
+}
+</script>
 
-        try:
-            gj = load_geojson_from_s3(key)
-        except Exception as e:
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": f"Failed loading {key}: {str(e)}",
-                }
-            )
-
-        feats_all = gj.get("features", [])
-
-        # First pass: apply city/ZIP/income/value filters
-        feats_filtered = filter_features(
-            feats_all,
-            income_min=income_min,
-            value_min=value_min,
-            zip_code=zip_code,
-            city_name=city,
-        )
-
-        message = None
-
-        # If we asked for a city but got zero matches while the county has data,
-        # fall back to county-wide results and tell the user.
-        if city and zip_code is None and len(feats_filtered) == 0 and len(feats_all) > 0:
-            app.logger.info(
-                f"[search] city filter for {city} returned 0; falling back to county-level"
-            )
-            feats_filtered = filter_features(
-                feats_all,
-                income_min=income_min,
-                value_min=value_min,
-                zip_code=None,
-                city_name=None,
-            )
-            message = f"No records matched city '{city}'. Showing county-wide results instead."
-
-        total = len(feats_filtered)
-        feats_limited = feats_filtered[:MAX_RESULTS]
-
-        addresses = [feature_to_address_obj(f) for f in feats_limited]
-
-        return jsonify(
-            {
-                "ok": True,
-                "query": query,
-                "state": state,
-                "county": county,
-                "city": city,
-                "zip": zip_code,
-                "dataset_key": key,
-                "total": total,
-                "shown": len(addresses),
-                "results": addresses,
-                "message": message,
-            }
-        )
-    except Exception as e:
-        app.logger.exception(f"[search] unexpected error: {e}")
-        return jsonify({"ok": False, "error": "Server error (search failed)."}), 500
-
-
-@app.route("/export", methods=["POST"])
-def export():
-    if not session.get("authed"):
-        return jsonify({"ok": False, "error": "Unauthorized"}), 401
-
-    if request.is_json:
-        data = request.get_json(silent=True) or {}
-        query = (data.get("query") or "").strip()
-    else:
-        query = (request.form.get("query") or "").strip()
-
-    if not query:
-        return jsonify({"ok": False, "error": "Missing query for export."}), 400
-
-    state, county, city, zip_code, income_min, value_min = parse_location_and_filters(query)
-
-    if not state or not county:
-        return jsonify({"ok": False, "error": "Need a state + county to export."}), 400
-
-    key = resolve_dataset_key(state, county)
-    if not key:
-        return jsonify(
-            {
-                "ok": False,
-                "error": f"No dataset found for export for {county} County, {state}.",
-            }
-        ), 400
-
-    try:
-        gj = load_geojson_from_s3(key)
-    except Exception as e:
-        return jsonify(
-            {"ok": False, "error": f"Failed to load dataset for export: {str(e)}"}
-        ), 500
-
-    feats_all = gj.get("features", [])
-
-    feats_filtered = filter_features(
-        feats_all,
-        income_min=income_min,
-        value_min=value_min,
-        zip_code=zip_code,
-        city_name=city,
-    )
-
-    # same fallback behavior as search
-    if city and zip_code is None and len(feats_filtered) == 0 and len(feats_all) > 0:
-        feats_filtered = filter_features(
-            feats_all,
-            income_min=income_min,
-            value_min=value_min,
-            zip_code=None,
-            city_name=None,
-        )
-
-    rows = []
-    fieldnames = set()
-
-    for f in feats_filtered:
-        props = f.get("properties", {}).copy()
-        geom = f.get("geometry", {}) or {}
-        coords = geom.get("coordinates") or [None, None]
-        props["lon"] = coords[0]
-        props["lat"] = coords[1]
-        rows.append(props)
-        fieldnames.update(props.keys())
-
-    fieldnames = sorted(fieldnames)
-
-    mem = io.BytesIO()
-    with zipfile.ZipFile(mem, "w", zipfile.ZIP_DEFLATED) as zf:
-        buf = io.StringIO()
-        writer = csv.DictWriter(buf, fieldnames=fieldnames)
-        writer.writeheader()
-        for r in rows:
-            writer.writerow(r)
-        zf.writestr("addresses.csv", buf.getvalue())
-
-    mem.seek(0)
-    fname = f"pelee_export_{state}_{canonicalize_county_name(county).replace(' ', '_')}.zip"
-
-    return send_file(
-        mem,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=fname,
-    )
-
-
-# ----------------- MAIN -----------------
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5000"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+</body>
+</html>
