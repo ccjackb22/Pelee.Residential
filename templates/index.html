@@ -2,215 +2,485 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>PELÉE AI – Address Search</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PELÉE AI | Address Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <style>
+        :root {
+            --bg: #050816;
+            --card: #0b1220;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.18);
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --danger: #f97373;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            padding: 0;
-            background: #0e1320;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-                Roboto, Helvetica, Arial, sans-serif;
-            color: #e4e9f4;
-            -webkit-font-smoothing: antialiased;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            background: radial-gradient(circle at top, #111827 0, #020617 55%, #000 100%);
+            color: var(--text-main);
+        }
+
+        header {
+            padding: 18px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+            backdrop-filter: blur(16px);
+            background: linear-gradient(to right, rgba(15,23,42,0.9), rgba(15,23,42,0.7));
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 22px;
+            letter-spacing: 0.08em;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .header-right a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            opacity: 0.8;
+        }
+
+        .header-right a:hover {
+            opacity: 1;
+            text-decoration: underline;
         }
 
         .container {
-            max-width: 760px;
-            margin: 0 auto;
-            padding: 40px 20px;
+            max-width: 960px;
+            margin: 40px auto 60px;
+            padding: 0 16px;
         }
 
-        h1 {
+        .hero {
+            text-align: left;
+            margin-bottom: 24px;
+        }
+
+        .hero-title {
             font-size: 32px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
             margin-bottom: 8px;
-            color: #fff;
+            text-transform: uppercase;
         }
 
-        .logout {
-            text-align: right;
+        .hero-subtitle {
+            font-size: 16px;
+            color: var(--text-muted);
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(15,23,42,0.9);
+            border: 1px solid rgba(148,163,184,0.45);
             margin-bottom: 10px;
+            color: var(--text-muted);
         }
 
-        .logout a {
-            color: #9bb3ff;
-            text-decoration: none;
-            font-size: 14px;
+        .pill-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: #22c55e;
         }
 
-        p {
-            opacity: 0.85;
-            font-size: 15px;
-            line-height: 1.4;
+        .search-card {
+            background: radial-gradient(circle at top left, rgba(56,189,248,0.12), transparent 60%),
+                        linear-gradient(to bottom right, rgba(15,23,42,0.96), rgba(15,23,42,0.98));
+            border-radius: 18px;
+            padding: 20px 20px 18px;
+            border: 1px solid rgba(148,163,184,0.3);
+            box-shadow: 0 18px 60px rgba(15,23,42,0.8);
         }
 
-        input[type=text] {
-            width: 100%;
-            font-size: 18px;
-            padding: 14px 16px;
-            border: 1px solid #2e3856;
-            border-radius: 8px;
-            background: #111827;
-            color: #fff;
-            margin-top: 18px;
+        .search-form {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
         }
 
-        button {
-            margin-top: 20px;
-            width: 100%;
-            padding: 14px;
-            background: #2a5bff;
-            border: none;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 17px;
-            cursor: pointer;
-            font-weight: 600;
-        }
-
-        button:hover {
-            background: #1d46d6;
-        }
-
-        .results {
-            margin-top: 40px;
-        }
-
-        .summary {
-            background: #111827;
-            padding: 14px 16px;
-            border-radius: 8px;
-            border: 1px solid #2e3856;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-
-        .card {
-            background: #111827;
-            padding: 16px 20px;
-            border-radius: 8px;
-            border: 1px solid #2e3856;
-            margin-bottom: 14px;
-        }
-
-        .card strong {
-            color: #fff;
-        }
-
-        .export-btn {
-            margin-top: 16px;
-            display: inline-block;
+        .search-input {
+            flex: 1 1 220px;
+            background: rgba(15,23,42,0.9);
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.7);
             padding: 10px 16px;
-            background: #2a5bff;
-            color: #fff;
-            border-radius: 6px;
-            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-input input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-main);
+            font-size: 15px;
+        }
+
+        .search-input input::placeholder {
+            color: rgba(148,163,184,0.9);
+        }
+
+        .search-button {
+            border-radius: 999px;
+            border: none;
+            padding: 10px 18px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            background: linear-gradient(to right, #0ea5e9, #22c55e);
+            color: #0b1120;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .search-button:hover {
+            filter: brightness(1.05);
         }
 
         .examples {
-            font-size: 14px;
-            opacity: 0.75;
-            margin-top: 14px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .examples span {
+            color: var(--text-main);
+        }
+
+        .results-wrap {
+            margin-top: 28px;
+        }
+
+        .summary {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(148,163,184,0.4);
+            background: radial-gradient(circle at top left, var(--accent-soft), rgba(15,23,42,0.96));
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .summary strong {
+            color: var(--accent);
+        }
+
+        .error-box {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(248,113,113,0.7);
+            background: rgba(127,29,29,0.65);
+            color: #fecaca;
+            font-size: 13px;
+            margin-top: 12px;
+        }
+
+        .export-row {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .export-btn {
+            border-radius: 999px;
+            border: 1px solid rgba(56,189,248,0.6);
+            padding: 7px 12px;
+            font-size: 12px;
+            background: rgba(15,23,42,0.9);
+            color: var(--accent);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .export-btn:hover {
+            background: rgba(15,23,42,1);
+        }
+
+        .results-list {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        @media (min-width: 800px) {
+            .results-list {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .result-card {
+            background: linear-gradient(to bottom right, #020617, #020617);
+            border-radius: 12px;
+            padding: 12px 12px 11px;
+            border: 1px solid rgba(148,163,184,0.3);
+            box-shadow: 0 10px 30px rgba(15,23,42,0.8);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .result-address {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .result-meta {
+            color: var(--text-muted);
+        }
+
+        .pill-badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(15,23,42,0.9);
+            border: 1px solid rgba(148,163,184,0.7);
+            margin-right: 6px;
+            margin-top: 4px;
+        }
+
+        .loading {
+            opacity: 0.85;
         }
     </style>
 </head>
-
 <body>
 
-<div class="container">
-    <div class="logout">
+<header>
+    <div class="logo"><span>PELÉE</span> AI</div>
+    <div class="header-right">
         <a href="/logout">Logout</a>
     </div>
+</header>
 
-    <h1>PELÉE AI<br>Internal Data Tool · Residential + Commercial</h1>
-
-    <p>AI-powered address discovery<br>
-    Pull targeted addresses by county, city, ZIP, income bands, and home values in one natural-language query.</p>
-
-    <input id="query" type="text" placeholder="addresses in Wakulla County Florida" />
-
-    <button onclick="runSearch()">Search</button>
-
-    <div class="examples">
-        Examples:  
-        “addresses in Wakulla County Florida” ·  
-        “homes in Teton County WY with incomes over 200k” ·  
-        “ZIP 44116 residential addresses”
+<div class="container">
+    <div class="hero">
+        <div class="pill">
+            <span class="pill-dot"></span>
+            Internal Data Tool · Residential + Commercial
+        </div>
+        <div class="hero-title">AI-powered address discovery</div>
+        <div class="hero-subtitle">
+            Pull targeted addresses by county, city, ZIP, income bands, and home values in one natural-language query.
+        </div>
     </div>
 
-    <div id="results" class="results"></div>
+    <div class="search-card">
+        <form id="searchForm" class="search-form">
+            <div class="search-input">
+                <span>🔍</span>
+                <input
+                    id="query"
+                    type="text"
+                    placeholder="e.g. homes in Strongsville Ohio with incomes over 150k"
+                    autocomplete="off"
+                />
+            </div>
+            <button class="search-button" type="submit">
+                <span>Search</span> ⏎
+            </button>
+        </form>
+
+        <div class="examples">
+            Examples:
+            <span>“addresses in Wakulla County Florida”</span> ·
+            <span>“homes in Teton County WY with incomes over 200k”</span> ·
+            <span>“ZIP 44116 residential addresses”</span>
+        </div>
+
+        <div id="results-container" class="results-wrap"></div>
+    </div>
 </div>
 
 <script>
-async function runSearch() {
-    const q = document.getElementById("query").value.trim();
-    if (!q) return;
+const form = document.getElementById("searchForm");
+const queryInput = document.getElementById("query");
+const resultsDiv = document.getElementById("results-container");
 
-    const resultsDiv = document.getElementById("results");
-    resultsDiv.innerHTML = "<p>Searching…</p>";
+form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const q = (queryInput.value || "").trim();
+    if (!q) {
+        resultsDiv.innerHTML = "<div class='error-box'>Please enter a query.</div>";
+        return;
+    }
+
+    resultsDiv.innerHTML = `
+        <div class="summary loading">
+            Searching…<br>
+            <span style="color: var(--text-muted); font-size: 12px;">(${q})</span>
+        </div>
+    `;
 
     try {
-        const res = await fetch("/search", {
+        const resp = await fetch("/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ query: q })
         });
 
-        const data = await res.json();
-        if (!data.ok) {
-            resultsDiv.innerHTML = `<p style="color:#f66">Error: ${data.error || "Search failed."}</p>`;
+        if (!resp.ok) {
+            const text = await resp.text();
+            resultsDiv.innerHTML = `
+                <div class="error-box">
+                    Server error (${resp.status}).<br>
+                    <div style="opacity:0.8; margin-top:4px; font-size:11px;">${text || "No details provided."}</div>
+                </div>
+            `;
             return;
         }
 
-        renderResults(data);
+        const data = await resp.json();
 
+        if (!data.ok) {
+            resultsDiv.innerHTML = `<div class="error-box">${data.error || "Search failed."}</div>`;
+            return;
+        }
+
+        renderResults(q, data);
     } catch (err) {
-        resultsDiv.innerHTML = "<p style='color:#f66'>Server error.</p>";
+        resultsDiv.innerHTML = `
+            <div class="error-box">
+                Network or server error. Try again.<br>
+                <div style="opacity:0.8; margin-top:4px; font-size:11px;">${err}</div>
+            </div>
+        `;
     }
-}
+});
 
-function renderResults(data) {
-    const resultsDiv = document.getElementById("results");
+function renderResults(query, data) {
+    const hasResults = (data.results || []).length > 0;
 
-    const locBits = [];
-    if (data.city) locBits.push(data.city);
-    if (data.county) locBits.push(data.county + " County");
-    if (data.state) locBits.push(data.state);
-    if (data.zip) locBits.push("ZIP " + data.zip);
-
-    const messageLine = data.total > data.shown
-        ? `<br><em>Showing first ${data.shown} of ${data.total}. Export full CSV below.</em>`
+    const messageLine = data.message
+        ? `<br><span style="color: var(--text-muted); font-size: 12px;">${data.message}</span>`
         : "";
 
-    let html = `
+    const locationLine = (() => {
+        const parts = [];
+        if (data.city) parts.push(data.city);
+        if (data.county) parts.push(`${data.county} County`);
+        if (data.state) parts.push(data.state);
+        return parts.join(", ") || "—";
+    })();
+
+    const summaryHtml = `
         <div class="summary">
             <strong>Query</strong>: ${data.query}<br>
-            <strong>Location</strong>: ${locBits.join(", ") || "—"}<br>
-            <strong>Dataset</strong>: <span style="color:#cbd5f5">${data.dataset_key}</span><br>
-            <strong>Results</strong>: Showing ${data.shown} of ${data.total}
+            <strong>Location</strong>: ${locationLine}<br>
+            <strong>Dataset</strong>: <span style="color:#cbd5f5">${data.dataset_key || "n/a"}</span><br>
+            <strong>Results</strong>: Showing ${data.shown || 0} of ${data.total || 0}
             ${messageLine}
         </div>
     `;
 
-    html += `<form action="/export" method="POST" style="margin-bottom:20px;">
-                <input type="hidden" name="query" value="${data.query}">
-                <button class="export-btn">⬇️ Export full CSV</button>
-             </form>`;
-
-    for (const r of data.results) {
-        html += `
-            <div class="card">
-                <strong>${r.address}</strong><br>
-                ${r.city}, ${r.state} ${r.zip}<br>
-                Income: ${r.income || "—"}  
-                Value: ${r.value || "—"}<br>
-                Lat: ${r.lat} · Lon: ${r.lon}
+    let exportHtml = "";
+    if (hasResults) {
+        exportHtml = `
+            <div class="export-row">
+                <button class="export-btn" onclick="exportResults('${encodeURIComponent(query)}')">
+                    ⬇️ Export full CSV
+                </button>
             </div>
         `;
     }
 
-    resultsDiv.innerHTML = html;
+    let cards = "";
+    if (hasResults) {
+        cards = data.results.map((r) => {
+            const addr = r.address || "";
+            const city = r.city || "";
+            const st = r.state || "";
+            const zip = r.zip || "";
+            const income = r.income ?? "N/A";
+            const value = r.value ?? "N/A";
+            const lat = (r.lat !== null && r.lat !== undefined) ? r.lat : "—";
+            const lon = (r.lon !== null && r.lon !== undefined) ? r.lon : "—";
+
+            return `
+                <div class="result-card">
+                    <div class="result-address">${addr}</div>
+                    <div class="result-meta">
+                        ${city ? city + ", " : ""}${st}${zip ? " " + zip : ""}
+                    </div>
+                    <div class="result-meta">
+                        <span class="pill-badge">Income: ${income}</span>
+                        <span class="pill-badge">Value: ${value}</span>
+                    </div>
+                    <div class="result-meta" style="margin-top:4px;">
+                        Lat: ${lat} · Lon: ${lon}
+                    </div>
+                </div>
+            `;
+        }).join("");
+    } else {
+        cards = `
+            <div class="error-box" style="margin-top:12px;">
+                No matching addresses found for that filter.<br>
+                Try lowering the income/value threshold or adjusting the city / county / ZIP.
+            </div>
+        `;
+    }
+
+    resultsDiv.innerHTML = summaryHtml + exportHtml + `<div class="results-list">${cards}</div>`;
+}
+
+async function exportResults(qEncoded) {
+    const q = decodeURIComponent(qEncoded);
+    try {
+        const resp = await fetch("/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
+        });
+
+        if (!resp.ok) {
+            alert("Export failed (" + resp.status + ").");
+            return;
+        }
+
+        const blob = await resp.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "pelee_export.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        alert("Export failed: " + err);
+    }
 }
 </script>
 
