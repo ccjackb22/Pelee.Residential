@@ -21,7 +21,9 @@ PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
-S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts_acs")
+
+# *** YOU CONFIRMED THE CORRECT LOCATION ***
+S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts")
 
 MAX_RESULTS = 500
 
@@ -95,12 +97,10 @@ def canonical_county(name: str):
 def detect_state(query: str):
     q_lower = query.lower()
 
-    # full names
     for fullname, code in US_STATES.items():
         if re.search(r"\b" + re.escape(fullname) + r"\b", q_lower):
             return code
 
-    # two-letter caps
     for m in re.finditer(r"\b([A-Z]{2})\b", query):
         t = m.group(1).lower()
         if t in STATE_CODES:
@@ -129,7 +129,6 @@ def parse_filters(q: str):
             if raw.endswith("m"):
                 mult = 1_000_000
                 raw = raw[:-1]
-
             try:
                 val = float(raw) * mult
             except:
@@ -210,37 +209,62 @@ def list_keys(state: str):
 
         if not resp.get("IsTruncated"):
             break
+
         token = resp.get("NextContinuationToken")
 
     _STATE_KEYS_CACHE[state] = keys
     return keys
 
+# ---------------------------------------------------------
+# NEW IMPROVED DATASET PICKER
+# ---------------------------------------------------------
+
 def pick_dataset(state: str, county: str):
+    """
+    Picks correct dataset for <county>.
+    Handles:
+      - county.geojson
+      - county-with-values-income.geojson
+      - county-with-tracts-acs-with-values-income.geojson
+      - ANY variant containing "-with..."
+    Always prefers enriched datasets.
+    """
     if not state or not county:
         return None
 
     state = state.lower()
-    county = canonical_county(county)
+    county_clean = canonical_county(county)
 
     keys = list_keys(state)
     if not keys:
         return None
 
     matches = []
-    for k in keys:
-        base = os.path.basename(k).replace(".geojson", "")
-        base_clean = canonical_county(base.replace("-with-values-income", ""))
 
-        if base_clean == county:
+    for k in keys:
+        base = os.path.basename(k).replace(".geojson", "").lower()
+
+        # Strip everything after "countyname" before "-with..."
+        base_root = re.split(r"-with.*", base)[0]
+
+        base_clean = canonical_county(base_root)
+
+        if base_clean == county_clean:
             matches.append(k)
 
-    if matches:
-        for m in matches:
-            if "with-values-income" in m:
-                return m
-        return matches[0]
+    if not matches:
+        return None
 
-    return None
+    # Prioritize enriched versions
+    for m in matches:
+        if "with-values" in m or "with-value" in m:
+            return m
+
+    return matches[0]
+
+# ---------------------------------------------------------
+# LOAD + FILTER
+# ---------------------------------------------------------
 
 def load_geojson(key: str):
     data = s3_client.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
