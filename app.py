@@ -66,11 +66,24 @@ US_STATES = {
 # Lowercase → uppercase
 STATE_CODES = {code.lower(): code for code in US_STATES.values()}
 
-# Special case mapping
+# City → county helpers
 CITY_TO_COUNTY = {
-    "wa": {"vancouver": ("clark", "Vancouver")},
-    "oh": {},     # You can add later
-    "tx": {},     # You can add later
+    "wa": {
+        "vancouver": ("clark", "Vancouver"),
+    },
+    "oh": {
+        "strongsville": ("cuyahoga", "Strongsville"),
+        "berea": ("cuyahoga", "Berea"),
+        "rocky river": ("cuyahoga", "Rocky River"),
+        "lakewood": ("cuyahoga", "Lakewood"),
+        "westlake": ("cuyahoga", "Westlake"),
+        "bay village": ("cuyahoga", "Bay Village"),
+        "avon": ("lorain", "Avon"),
+        "avon lake": ("lorain", "Avon Lake"),
+    },
+    "tx": {
+        # can add Houston, etc. later if you want city-level TX defaults
+    },
 }
 
 
@@ -92,23 +105,24 @@ def canonical_county(name: str) -> str:
 
 def detect_state(query: str):
     """
-    FIXED: this will NEVER treat 'in' as Indiana, 'me' as Maine,
-    unless clearly used as a STATE.
+    FIX: Don't treat random words like 'me', 'in', 'or' as states.
+    Strategy:
+      1) Match full state names as whole words (e.g. 'texas').
+      2) Match TWO-LETTER ALL-CAPS tokens in the ORIGINAL string
+         (e.g. 'TX', 'FL', 'WA'), not lowercase words.
     """
 
-    q = query.lower()
-    tokens = [t.strip(",.") for t in q.split()]
+    q_lower = query.lower()
 
-    # 1) Check full names
+    # 1) Full names, whole-word match
     for fullname, code in US_STATES.items():
-        if fullname in q:
+        if re.search(r"\b" + re.escape(fullname) + r"\b", q_lower):
             return code
 
-    # 2) Check 2-letter codes that aren't English words
-    for t in tokens:
-        if len(t) == 2 and t in STATE_CODES:
-            # ONLY accept if surrounded by commas or at end
-            # e.g. "Houston, TX"
+    # 2) Two-letter ALL CAPS codes in original text, like "TX"
+    for m in re.finditer(r"\b([A-Z]{2})\b", query):
+        t = m.group(1).lower()
+        if t in STATE_CODES:
             return STATE_CODES[t]
 
     return None
@@ -142,7 +156,7 @@ def parse_filters(q: str):
             except:
                 continue
 
-            window = " ".join(toks[max(0, i-5): i+5])
+            window = " ".join(toks[max(0, i - 5): i + 5])
             if "income" in window or "household" in window:
                 income_min = val
                 continue
@@ -168,32 +182,30 @@ def parse_location(query: str):
     county = None
     city = None
 
-    # ZIP-based routing (optional)
-    # You can add ZIP→county later when you want.
-    # For now ZIP only acts as filter inside county.
-
-    # Extract county from "___ County ___"
+    # "___ County ___"
     if "county" in tokens:
         idx = tokens.index("county")
         if idx > 0:
-            possible = tokens[idx - 1]
-            county = possible
+            county = tokens[idx - 1]
 
-    # City → County overrides if known
+    # City → county mapping, if we know this combo
     if state:
-        st = state.lower()
-        for cname, (c_county, pretty) in CITY_TO_COUNTY.get(st, {}).items():
+        st_key = state.lower()
+        city_map = CITY_TO_COUNTY.get(st_key, {})
+        for cname, (c_county, pretty) in city_map.items():
             if cname in q:
                 county = c_county
                 city = pretty
+                break
 
-    # OH pattern ("Strongsville Ohio" → Cuyahoga)
+    # Special: Ohio "Strongsville Ohio" / "Berea OH" → Cuyahoga
     if not county and state == "OH":
         for i, t in enumerate(tokens):
-            if t == "oh" or t == "ohio":
+            if t in ("oh", "ohio"):
                 if i > 0:
                     city = tokens[i - 1]
-                    county = "cuyahoga"
+                county = "cuyahoga"
+                break
 
     return state, county, city, zip_code, income_min, value_min
 
@@ -218,7 +230,8 @@ def list_keys(state: str):
 
         try:
             resp = s3_client.list_objects_v2(**kwargs)
-        except:
+        except ClientError as e:
+            app.logger.error(f"S3 list_objects_v2 failed for state={state}: {e}")
             break
 
         for obj in resp.get("Contents", []):
@@ -245,18 +258,19 @@ def pick_dataset(state: str, county: str):
     if not keys:
         return None
 
-    # STRONG, SIMPLE MATCHING
+    # strict: only exact county matches
     candidates = []
 
     for k in keys:
         base = os.path.basename(k).replace(".geojson", "")
+        # strip "-with-values-income"
         base_clean = canonical_county(base.replace("-with-values-income", ""))
 
         if base_clean == county:
             candidates.append(k)
 
     if candidates:
-        # Prefer enriched
+        # prefer enriched
         for c in candidates:
             if "with-values-income" in c:
                 return c
@@ -301,10 +315,12 @@ def apply_filters(features, income_min, value_min, zip_code):
     for f in features:
         p = f.get("properties", {})
 
+        # ZIP filter
         if zip_code:
             if str(p.get("postcode")) != str(zip_code):
                 continue
 
+        # income filter
         if income_min:
             v = p.get("DP03_0062E") or p.get("median_income") or p.get("income")
             try:
@@ -313,6 +329,7 @@ def apply_filters(features, income_min, value_min, zip_code):
             except:
                 continue
 
+        # value filter
         if value_min:
             v = p.get("DP04_0089E") or p.get("median_value") or p.get("home_value")
             try:
@@ -329,7 +346,7 @@ def apply_filters(features, income_min, value_min, zip_code):
 # ROUTES
 # ---------------------------------------------------------
 
-@app.route("/login", methods=["GET","POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         if request.form.get("password") == PASSWORD:
@@ -364,6 +381,11 @@ def search():
         return jsonify({"ok": False, "error": "Enter a search query."})
 
     state, county, city, zip_code, income_min, value_min = parse_location(query)
+
+    app.logger.info(
+        f"[search] q={query!r} → state={state}, county={county}, city={city}, zip={zip_code}, "
+        f"income_min={income_min}, value_min={value_min}"
+    )
 
     if not state:
         return jsonify({"ok": False, "error": "No state detected."})
