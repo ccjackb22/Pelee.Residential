@@ -473,7 +473,7 @@ async function exportResults(qEncoded) {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "pelee_export.zip";
+        a.download = "pelee_export.csv";   /* ← FIXED HERE */
         document.body.appendChild(a);
         a.click();
         a.remove();
