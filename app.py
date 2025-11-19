@@ -86,10 +86,10 @@ CITY_TO_COUNTY = {
     },
 }
 
-
 # ---------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------
+
 
 def norm(s):
     return " ".join((s or "").lower().strip().split())
@@ -105,7 +105,8 @@ def canonical_county(name: str) -> str:
 
 def detect_state(query: str):
     """
-    FIX: Don't treat random words like 'me', 'in', 'or' as states.
+    Don't treat random words like 'me', 'in', 'or' as states.
+
     Strategy:
       1) Match full state names as whole words (e.g. 'texas').
       2) Match TWO-LETTER ALL-CAPS tokens in the ORIGINAL string
@@ -247,35 +248,77 @@ def list_keys(state: str):
     return keys
 
 
+def _strip_known_suffixes(base: str) -> str:
+    """
+    Take a filename without extension and remove common county/address suffixes
+    so 'harris-with-values-income' or 'harris-parcels-county-with-tracts'
+    both reduce to 'harris'.
+    """
+    suffixes = [
+        "-with-values-income",
+        "-parcels-county-with-tracts",
+        "-addresses-county-with-tracts",
+        "-buildings-county-with-tracts",
+        "-parcels-county",
+        "-addresses-county",
+        "-buildings-county",
+        "-parcels",
+        "-addresses",
+        "-buildings",
+        "-county",
+    ]
+    name = base
+    for suf in suffixes:
+        if name.endswith(suf):
+            name = name[: -len(suf)]
+    return name
+
+
 def pick_dataset(state: str, county: str):
     if not state or not county:
         return None
 
     state = state.lower()
-    county = canonical_county(county)
+    county = canonical_county(county)  # e.g. "harris"
 
     keys = list_keys(state)
     if not keys:
+        app.logger.warning(f"No keys found in S3 for state={state}")
         return None
 
-    # strict: only exact county matches
-    candidates = []
+    exact_candidates = []
+    fuzzy_candidates = []
 
     for k in keys:
         base = os.path.basename(k).replace(".geojson", "")
-        # strip "-with-values-income"
-        base_clean = canonical_county(base.replace("-with-values-income", ""))
+        core = _strip_known_suffixes(base)
+        core_clean = canonical_county(core)
 
-        if base_clean == county:
-            candidates.append(k)
+        # strict match on cleaned base
+        if core_clean == county:
+            exact_candidates.append(k)
+        # fallback: filename contains the county name somewhere
+        elif county in base.lower():
+            fuzzy_candidates.append(k)
 
-    if candidates:
-        # prefer enriched
-        for c in candidates:
+    # Prefer exact match (with enriched versions first)
+    def prefer_enriched(cands):
+        for c in cands:
             if "with-values-income" in c:
                 return c
-        return candidates[0]
+        return cands[0] if cands else None
 
+    choice = prefer_enriched(exact_candidates)
+    if choice:
+        app.logger.info(f"pick_dataset: exact match for county={county}, state={state} -> {choice}")
+        return choice
+
+    choice = prefer_enriched(fuzzy_candidates)
+    if choice:
+        app.logger.info(f"pick_dataset: fuzzy match for county={county}, state={state} -> {choice}")
+        return choice
+
+    app.logger.warning(f"pick_dataset: no match for county={county}, state={state}")
     return None
 
 
@@ -345,6 +388,7 @@ def apply_filters(features, income_min, value_min, zip_code):
 # ---------------------------------------------------------
 # ROUTES
 # ---------------------------------------------------------
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
