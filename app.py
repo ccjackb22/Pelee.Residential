@@ -19,13 +19,6 @@ import boto3
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
-# NEW: OpenAI client
-try:
-    from openai import OpenAI
-    _openai_client = OpenAI()  # will read OPENAI_API_KEY from env
-except Exception:
-    _openai_client = None
-
 # ----------------- CONFIG -----------------
 
 load_dotenv()
@@ -108,17 +101,32 @@ US_STATES = {
 # allow detection of 2-letter codes like "fl", "oh"
 STATE_CODES = {v: v for v in US_STATES.values()}
 
-# minimal ZIP → (STATE, COUNTY) mapping for overrides if you want
+# minimal ZIP → (STATE, COUNTY) mapping for what you’ve tested so far
 ZIP_TO_STATE_COUNTY = {
-    # "44116": ("OH", "cuyahoga"),
-    # add overrides here if you have them / need to force a specific county
+    # Rocky River / ZIP 44116
+    "44116": ("OH", "cuyahoga"),
+    # add more here as needed
 }
 
-# ----------------- BASIC UTILITIES -----------------
+# minimal city → county mapping for city-only queries
+CITY_TO_COUNTY = {
+    "wa": {
+        # city name (lowercase) -> (county_name, Pretty City Name)
+        "vancouver": ("clark", "Vancouver"),
+        # add more WA cities here over time
+    },
+    "oh": {
+        # you can use this if you want more precise city handling later
+        # "berea": ("cuyahoga", "Berea"),
+    },
+    # expand for other states as needed
+}
+
+# ----------------- UTILITIES -----------------
 
 
 def normalize_text(s: str) -> str:
-    return " ".join((s or "").strip().lower().split())
+    return " ".join(s.strip().lower().split())
 
 
 def canonicalize_county_name(name: str) -> str:
@@ -134,17 +142,18 @@ def canonicalize_county_name(name: str) -> str:
     return " ".join(s.split())
 
 
-def detect_state_heuristic(q: str):
+def detect_state(q: str):
     """
-    Fallback if LLM doesn't give a state.
+    Try to detect a 2-letter state or full state name from the query.
     """
-    q = (q or "").lower()
+    q = q.lower()
     tokens = q.split()
 
     # look for 2-letter codes first
     for t in tokens:
         t_clean = t.strip(",.").lower()
-        if t_clean == "in":  # don't treat "in" as Indiana
+        # don't treat the word "in" as Indiana
+        if t_clean == "in":
             continue
         if t_clean in STATE_CODES:
             return t_clean.upper()
@@ -157,19 +166,22 @@ def detect_state_heuristic(q: str):
     return None
 
 
-def extract_zip_heuristic(query: str):
+def extract_zip(query: str):
     """
-    Return the first 5-digit ZIP code found, or None (fallback).
+    Return the first 5-digit ZIP code found, or None.
     """
-    m = re.search(r"\b(\d{5})\b", query or "")
+    m = re.search(r"\b(\d{5})\b", query)
     return m.group(1) if m else None
 
 
-def parse_numeric_filters_heuristic(query: str):
+def parse_numeric_filters(query: str):
     """
-    Legacy simple 'over X' / 'above X' parsing as backup if LLM fails.
+    Extract simple 'over X' / 'above X' for incomes or values.
+
+    CHANGE: if ambiguous, default to treating it as a HOME VALUE filter,
+    not an income filter.
     """
-    q = (query or "").lower()
+    q = query.lower()
     income_min = None
     value_min = None
 
@@ -193,159 +205,105 @@ def parse_numeric_filters_heuristic(query: str):
             window = " ".join(tokens[max(0, i - 3): i + 6])
             if "income" in window or "household" in window:
                 income_min = num
-            elif "value" in window or "home" in window or "homes" in window or "properties" in window:
+            elif (
+                "value" in window
+                or "home" in window
+                or "homes" in window
+                or "properties" in window
+                or "house" in window
+            ):
                 value_min = num
             else:
-                if income_min is None:
-                    income_min = num
+                # AMBIGUOUS: default to home VALUE, not income
+                if value_min is None:
+                    value_min = num
 
     return income_min, value_min
 
 
-# ----------------- LLM-ASSISTED PARSING -----------------
-
-
-def llm_parse_query(raw_query: str):
-    """
-    Use GPT to interpret the query:
-    - state (2-letter)
-    - county (without "County")
-    - city (plain city name)
-    - zip (5-digit string)
-    - min_income, min_value (integer dollars)
-    Returns dict or None if anything fails.
-    """
-    if not _openai_client:
-        return None
-
-    # If no API key set, bail out
-    if not os.getenv("OPENAI_API_KEY"):
-        return None
-
-    prompt = f"""
-You are a strict US address query parser.
-
-User query:
-{raw_query}
-
-Extract the following fields about where the user wants addresses from:
-
-- "state": 2-letter US state code, or null if unknown.
-- "county": county name WITHOUT the word "County" or "Parish" (e.g. "Wakulla", "Cuyahoga"), or null.
-- "city": city/town name only (e.g. "Berea", "Vancouver"), or null.
-- "zip": 5-digit ZIP code as a string if clearly specified (e.g. "44116"), or null.
-- "min_income": minimum household income in dollars (integer) if clearly requested (e.g. "over 200k" → 200000), else null.
-- "min_value": minimum home/property value in dollars (integer) if clearly requested, else null.
-
-Rules:
-- Prefer county + state if both are specified.
-- If a city and state are given and you know what county that city is in, fill in "county" as that county name.
-- If a ZIP and city/state conflict, trust the ZIP for the zip field, but still set the county to whatever county you believe that area is in.
-- If the user only says "homes over 200k", that refers to min_value.
-- If they say "incomes over 200k" or "household income above 150k", that refers to min_income.
-- If ambiguous "over 200k" appears alone, treat it as min_income.
-
-Respond ONLY with a JSON object, no extra text.
-Example response:
-{{"state":"OH","county":"cuyahoga","city":"Berea","zip":"44116","min_income":150000,"min_value":200000}}
-"""
-
-    try:
-        resp = _openai_client.chat.completions.create(
-            model="gpt-4.1-mini",
-            temperature=0,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a precise JSON-only geo parser for US address queries.",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-        )
-
-        content = resp.choices[0].message.content
-        if isinstance(content, list):
-            # safety: handle multi-part content
-            content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
-        data = json.loads(content)
-        return data
-    except Exception as e:
-        app.logger.error(f"[llm_parse_query] LLM parsing failed: {e}")
-        return None
-
-
 def parse_location_and_filters(query: str):
     """
-    Combined LLM + heuristic parser.
-
-    Returns:
-      state, county, city, zip_code, income_min, value_min
+    Parse state, county, city, ZIP and income/value filters from a query.
     """
     raw = query or ""
-    q_norm = normalize_text(raw)
+    q = normalize_text(raw)
+    tokens = q.split()
 
-    # legacy numeric fallback
-    legacy_income, legacy_value = parse_numeric_filters_heuristic(raw)
-    legacy_zip = extract_zip_heuristic(raw)
-    legacy_state = detect_state_heuristic(raw)
+    # numeric filters
+    income_min, value_min = parse_numeric_filters(raw)
 
-    llm_data = llm_parse_query(raw)
+    # ZIP
+    zip_code = extract_zip(raw)
 
-    state = None
+    # state & county & city
+    state = detect_state(q)
     county = None
     city = None
-    zip_code = None
-    income_min = None
-    value_min = None
 
-    if llm_data:
-        state = (llm_data.get("state") or "").upper() or None
-        county = llm_data.get("county") or None
-        city = llm_data.get("city") or None
-        # zip always string or null
-        zip_code = llm_data.get("zip") or None
-
-        try:
-            mi = llm_data.get("min_income", None)
-            if mi is not None:
-                income_min = int(mi)
-        except Exception:
-            income_min = None
-
-        try:
-            mv = llm_data.get("min_value", None)
-            if mv is not None:
-                value_min = int(mv)
-        except Exception:
-            value_min = None
-
-    # Fallbacks if LLM missed something
-    if not state:
-        state = legacy_state
-
-    if not zip_code and legacy_zip:
-        zip_code = legacy_zip
-
-    # if ZIP is mapped explicitly to state/county overrides
+    # if ZIP maps directly to a state+county, prefer that
     if zip_code and zip_code in ZIP_TO_STATE_COUNTY:
-        st, ct = ZIP_TO_STATE_COUNTY[zip_code]
-        state = st or state
-        county = ct or county
+        zip_state, zip_county = ZIP_TO_STATE_COUNTY[zip_code]
+        if not state:
+            state = zip_state
+        county = zip_county
 
-    # numeric fallbacks
-    if income_min is None and legacy_income is not None:
-        income_min = legacy_income
-    if value_min is None and legacy_value is not None:
-        value_min = legacy_value
+    # County by "X County Y" pattern
+    if not county and "county" in tokens:
+        idx = tokens.index("county")
+        j = idx - 1
+        STOP = {
+            "in",
+            "of",
+            "all",
+            "any",
+            "properties",
+            "homes",
+            "households",
+            "residential",
+            "addresses",
+            "parcels",
+        }
+        county_tokens_rev = []
+        while j >= 0:
+            t = tokens[j]
+            if t in STOP:
+                break
+            county_tokens_rev.append(t)
+            j -= 1
+        county_tokens = list(reversed(county_tokens_rev))
+        if county_tokens:
+            county = " ".join(county_tokens)
+
+    # Ohio special: city-only → default to Cuyahoga
+    if not county and state == "OH":
+        state_idx = None
+        for i, t in enumerate(tokens):
+            if t.lower() in STATE_CODES or t in US_STATES:
+                state_idx = i
+                break
+        if state_idx is not None and state_idx > 0:
+            j = state_idx - 1
+            STOP = {"in", "ohio", "oh"}
+            city_tokens_rev = []
+            while j >= 0 and tokens[j] not in STOP:
+                city_tokens_rev.append(tokens[j])
+                j -= 1
+            city_tokens = list(reversed(city_tokens_rev))
+            if city_tokens:
+                city = " ".join(city_tokens)
+        county = "cuyahoga"
+
+    # City→County mapping (Vancouver, WA, etc.)
+    if state and not county:
+        st_key = state.lower()
+        city_map = CITY_TO_COUNTY.get(st_key, {})
+        for city_name, (city_county, pretty_city) in city_map.items():
+            if city_name in q:
+                county = city_county
+                city = pretty_city
+                break
 
     return state, county, city, zip_code, income_min, value_min
-
-
-# ----------------- S3 + FILTERING -----------------
 
 
 def list_state_keys(state: str):
@@ -393,12 +351,6 @@ def resolve_dataset_key(state: str, county: str):
     """
     Given state code (e.g., 'FL') and county name (e.g., 'Wakulla'),
     pick the best matching S3 key.
-
-    Preference:
-      1) exact county + '-with-values-income'
-      2) exact county + '.geojson'
-      3) fuzzy with '-with-values-income'
-      4) fuzzy raw '.geojson'
     """
     if not state or not county:
         return None
@@ -449,25 +401,17 @@ def load_geojson_from_s3(key: str):
         raise
 
 
-def filter_features(features, income_min=None, value_min=None, city=None, zip_code=None):
+def filter_features(features, income_min=None, value_min=None, zip_code=None, city_name=None):
     """
-    Filter by income, value, optional city, and optional ZIP (postcode).
-
-    Rules:
-    - If zip_code is present, we always filter by postcode == zip_code (string compare).
-    - If city is present AND zip_code is None, we filter by city as well.
+    Filter by income, value, ZIP, and optional CITY name.
     """
-    if (income_min is None) and (value_min is None) and not zip_code and not city:
+    if (income_min is None) and (value_min is None) and not zip_code and not city_name:
         return features
 
     income_keys = ["DP03_0062E", "median_income", "income", "household_income"]
     value_keys = ["DP04_0089E", "median_value", "home_value", "value"]
 
-    city_norm = None
-    if city:
-        # Normalize: "Berea" == "berea" == "BEREA CITY"
-        c = str(city).strip().lower()
-        city_norm = c.replace(" city", "")
+    city_norm = city_name.lower() if city_name else None
 
     def read_val(props, keys):
         for k in keys:
@@ -484,16 +428,15 @@ def filter_features(features, income_min=None, value_min=None, city=None, zip_co
         keep = True
 
         # ZIP filter
-        if zip_code is not None:
+        if keep and zip_code is not None:
             pc = str(p.get("postcode") or "").strip()
-            if pc != str(zip_code):
+            if pc != zip_code:
                 keep = False
 
-        # City filter (only if we DON'T already have a zip; zip is more specific)
-        if keep and city_norm is not None and zip_code is None:
-            city_val = str(p.get("city") or "").strip().lower()
-            city_val = city_val.replace(" city", "")
-            if not city_val or city_val != city_norm:
+        # CITY filter – only if we detected a specific city
+        if keep and city_norm:
+            feat_city = str(p.get("city") or "").strip().lower()
+            if feat_city != city_norm:
                 keep = False
 
         if keep and income_min is not None:
@@ -550,7 +493,6 @@ def feature_to_address_obj(feat):
         "lat": coords[1],
         "lon": coords[0],
     }
-
 
 # ----------------- ROUTES -----------------
 
@@ -644,8 +586,8 @@ def search():
             feats,
             income_min=income_min,
             value_min=value_min,
-            city=city,
             zip_code=zip_code,
+            city_name=city,
         )
 
         total = len(feats)
@@ -712,8 +654,8 @@ def export():
         feats,
         income_min=income_min,
         value_min=value_min,
-        city=city,
         zip_code=zip_code,
+        city_name=city,
     )
 
     rows = []
