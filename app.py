@@ -98,35 +98,36 @@ US_STATES = {
     "wyoming": "wy",
 }
 
-# allow detection of 2-letter codes like "fl", "oh"
+# allow detection of 2-letter codes like "fl", "oh", "tx"
 STATE_CODES = {v: v for v in US_STATES.values()}
 
 # minimal ZIP → (STATE, COUNTY) mapping for what you’ve tested so far
 ZIP_TO_STATE_COUNTY = {
     # Rocky River / ZIP 44116
     "44116": ("OH", "cuyahoga"),
-    # add more here as needed
+    # add more as needed
 }
 
-# minimal city → county mapping for city-only queries
+# minimal city → county mapping for things like Vancouver, WA
 CITY_TO_COUNTY = {
     "wa": {
         # city name (lowercase) -> (county_name, Pretty City Name)
         "vancouver": ("clark", "Vancouver"),
-        # add more WA cities here over time
     },
-    "oh": {
-        # you can use this if you want more precise city handling later
-        # "berea": ("cuyahoga", "Berea"),
-    },
-    # expand for other states as needed
+    # you can add more states / cities over time
+    # "oh": {"berea": ("cuyahoga", "Berea"), "strongsville": ("cuyahoga", "Strongsville")},
 }
+
 
 # ----------------- UTILITIES -----------------
 
 
 def normalize_text(s: str) -> str:
-    return " ".join(s.strip().lower().split())
+    return " ".join((s or "").strip().lower().split())
+
+
+def normalize_city(s: str) -> str:
+    return normalize_text(s)
 
 
 def canonicalize_county_name(name: str) -> str:
@@ -145,11 +146,12 @@ def canonicalize_county_name(name: str) -> str:
 def detect_state(q: str):
     """
     Try to detect a 2-letter state or full state name from the query.
+    NO AI here; purely deterministic.
     """
-    q = q.lower()
+    q = (q or "").lower()
     tokens = q.split()
 
-    # look for 2-letter codes first
+    # look for 2-letter codes first (tx, oh, fl, etc.)
     for t in tokens:
         t_clean = t.strip(",.").lower()
         # don't treat the word "in" as Indiana
@@ -170,18 +172,15 @@ def extract_zip(query: str):
     """
     Return the first 5-digit ZIP code found, or None.
     """
-    m = re.search(r"\b(\d{5})\b", query)
+    m = re.search(r"\b(\d{5})\b", query or "")
     return m.group(1) if m else None
 
 
 def parse_numeric_filters(query: str):
     """
     Extract simple 'over X' / 'above X' for incomes or values.
-
-    CHANGE: if ambiguous, default to treating it as a HOME VALUE filter,
-    not an income filter.
     """
-    q = query.lower()
+    q = (query or "").lower()
     income_min = None
     value_min = None
 
@@ -203,27 +202,28 @@ def parse_numeric_filters(query: str):
                 continue
 
             window = " ".join(tokens[max(0, i - 3): i + 6])
-            if "income" in window or "household" in window:
+            if any(x in window for x in ["income", "household"]):
                 income_min = num
-            elif (
-                "value" in window
-                or "home" in window
-                or "homes" in window
-                or "properties" in window
-                or "house" in window
-            ):
+            elif any(x in window for x in ["value", "home", "homes", "properties"]):
                 value_min = num
             else:
-                # AMBIGUOUS: default to home VALUE, not income
-                if value_min is None:
-                    value_min = num
+                # default to income if ambiguous
+                if income_min is None:
+                    income_min = num
 
     return income_min, value_min
 
 
 def parse_location_and_filters(query: str):
     """
-    Parse state, county, city, ZIP and income/value filters from a query.
+    Purely deterministic parsing of state, county, city, ZIP and income/value filters.
+
+    Supports examples like:
+      - "addresses in Wakulla County Florida"
+      - "ZIP 44116 residential addresses"
+      - "addresses in vancouver wa"
+      - "homes in Strongsville Ohio with incomes over 300k"
+      - "Give me residential addresses in Harris County TX"
     """
     raw = query or ""
     q = normalize_text(raw)
@@ -232,23 +232,21 @@ def parse_location_and_filters(query: str):
     # numeric filters
     income_min, value_min = parse_numeric_filters(raw)
 
-    # ZIP
+    # 1) ZIP detection
     zip_code = extract_zip(raw)
-
-    # state & county & city
     state = detect_state(q)
     county = None
     city = None
 
-    # if ZIP maps directly to a state+county, prefer that
+    # ZIP -> state + county if we know it
     if zip_code and zip_code in ZIP_TO_STATE_COUNTY:
         zip_state, zip_county = ZIP_TO_STATE_COUNTY[zip_code]
         if not state:
             state = zip_state
         county = zip_county
 
-    # County by "X County Y" pattern
-    if not county and "county" in tokens:
+    # 2) County by "X County" pattern
+    if "county" in tokens:
         idx = tokens.index("county")
         j = idx - 1
         STOP = {
@@ -274,33 +272,48 @@ def parse_location_and_filters(query: str):
         if county_tokens:
             county = " ".join(county_tokens)
 
-    # Ohio special: city-only → default to Cuyahoga
-    if not county and state == "OH":
-        state_idx = None
-        for i, t in enumerate(tokens):
-            if t.lower() in STATE_CODES or t in US_STATES:
-                state_idx = i
+    # 3) Generic city detection: "<City> <ST>"
+    # Works for things like "Berea OH", "Vancouver WA", "Strongsville Ohio"
+    if state:
+        state_token_positions = []
+        state_lc = state.lower()
+        full_state_name = None
+        for name, code in US_STATES.items():
+            if code.upper() == state:
+                full_state_name = name
                 break
-        if state_idx is not None and state_idx > 0:
-            j = state_idx - 1
-            STOP = {"in", "ohio", "oh"}
+
+        for i, t in enumerate(tokens):
+            t_clean = t.strip(",.")
+            if t_clean == state_lc or (full_state_name and t_clean == full_state_name):
+                state_token_positions.append(i)
+
+        if state_token_positions:
+            idx = state_token_positions[0]
+            j = idx - 1
+            STOP = {"in", "of", full_state_name or "", state_lc}
             city_tokens_rev = []
             while j >= 0 and tokens[j] not in STOP:
                 city_tokens_rev.append(tokens[j])
                 j -= 1
             city_tokens = list(reversed(city_tokens_rev))
-            if city_tokens:
+            if city_tokens and not city:
                 city = " ".join(city_tokens)
+
+    # 4) Ohio special-case: if we have a city and state == OH but no county → assume Cuyahoga
+    if state == "OH" and city and not county:
         county = "cuyahoga"
 
-    # City→County mapping (Vancouver, WA, etc.)
-    if state and not county:
+    # 5) City → County mapping for things like Vancouver, WA
+    if state:
         st_key = state.lower()
         city_map = CITY_TO_COUNTY.get(st_key, {})
         for city_name, (city_county, pretty_city) in city_map.items():
             if city_name in q:
-                county = city_county
-                city = pretty_city
+                if not county:
+                    county = city_county
+                if not city:
+                    city = pretty_city
                 break
 
     return state, county, city, zip_code, income_min, value_min
@@ -351,6 +364,12 @@ def resolve_dataset_key(state: str, county: str):
     """
     Given state code (e.g., 'FL') and county name (e.g., 'Wakulla'),
     pick the best matching S3 key.
+
+    Preference:
+      1) exact county + '-with-values-income'
+      2) exact county + '.geojson'
+      3) fuzzy with '-with-values-income'
+      4) fuzzy raw '.geojson'
     """
     if not state or not county:
         return None
@@ -403,15 +422,23 @@ def load_geojson_from_s3(key: str):
 
 def filter_features(features, income_min=None, value_min=None, zip_code=None, city_name=None):
     """
-    Filter by income, value, ZIP, and optional CITY name.
+    Filter by income, value, optional ZIP, and optional city.
+
+    - ZIP filter: exact match on postcode
+    - City filter: exact match on normalized city string, if provided
     """
-    if (income_min is None) and (value_min is None) and not zip_code and not city_name:
+    if (
+        income_min is None
+        and value_min is None
+        and not zip_code
+        and not city_name
+    ):
         return features
 
     income_keys = ["DP03_0062E", "median_income", "income", "household_income"]
     value_keys = ["DP04_0089E", "median_value", "home_value", "value"]
 
-    city_norm = city_name.lower() if city_name else None
+    city_norm = normalize_city(city_name) if city_name else None
 
     def read_val(props, keys):
         for k in keys:
@@ -428,15 +455,15 @@ def filter_features(features, income_min=None, value_min=None, zip_code=None, ci
         keep = True
 
         # ZIP filter
-        if keep and zip_code is not None:
+        if zip_code is not None:
             pc = str(p.get("postcode") or "").strip()
             if pc != zip_code:
                 keep = False
 
-        # CITY filter – only if we detected a specific city
-        if keep and city_norm:
-            feat_city = str(p.get("city") or "").strip().lower()
-            if feat_city != city_norm:
+        # City filter (only if we have a city name and no explicit ZIP filter)
+        if keep and city_norm and zip_code is None:
+            feat_city_norm = normalize_city(p.get("city") or "")
+            if feat_city_norm != city_norm:
                 keep = False
 
         if keep and income_min is not None:
@@ -493,6 +520,7 @@ def feature_to_address_obj(feat):
         "lat": coords[1],
         "lon": coords[0],
     }
+
 
 # ----------------- ROUTES -----------------
 
@@ -581,19 +609,38 @@ def search():
                 }
             )
 
-        feats = gj.get("features", [])
-        feats = filter_features(
-            feats,
+        feats_all = gj.get("features", [])
+
+        # First pass: apply city/ZIP/income/value filters
+        feats_filtered = filter_features(
+            feats_all,
             income_min=income_min,
             value_min=value_min,
             zip_code=zip_code,
             city_name=city,
         )
 
-        total = len(feats)
-        feats = feats[:MAX_RESULTS]
+        message = None
 
-        addresses = [feature_to_address_obj(f) for f in feats]
+        # If we asked for a city but got zero matches while the county has data,
+        # fall back to county-wide results and tell the user.
+        if city and zip_code is None and len(feats_filtered) == 0 and len(feats_all) > 0:
+            app.logger.info(
+                f"[search] city filter for {city} returned 0; falling back to county-level"
+            )
+            feats_filtered = filter_features(
+                feats_all,
+                income_min=income_min,
+                value_min=value_min,
+                zip_code=None,
+                city_name=None,
+            )
+            message = f"No records matched city '{city}'. Showing county-wide results instead."
+
+        total = len(feats_filtered)
+        feats_limited = feats_filtered[:MAX_RESULTS]
+
+        addresses = [feature_to_address_obj(f) for f in feats_limited]
 
         return jsonify(
             {
@@ -607,6 +654,7 @@ def search():
                 "total": total,
                 "shown": len(addresses),
                 "results": addresses,
+                "message": message,
             }
         )
     except Exception as e:
@@ -649,19 +697,30 @@ def export():
             {"ok": False, "error": f"Failed to load dataset for export: {str(e)}"}
         ), 500
 
-    feats = gj.get("features", [])
-    feats = filter_features(
-        feats,
+    feats_all = gj.get("features", [])
+
+    feats_filtered = filter_features(
+        feats_all,
         income_min=income_min,
         value_min=value_min,
         zip_code=zip_code,
         city_name=city,
     )
 
+    # same fallback behavior as search
+    if city and zip_code is None and len(feats_filtered) == 0 and len(feats_all) > 0:
+        feats_filtered = filter_features(
+            feats_all,
+            income_min=income_min,
+            value_min=value_min,
+            zip_code=None,
+            city_name=None,
+        )
+
     rows = []
     fieldnames = set()
 
-    for f in feats:
+    for f in feats_filtered:
         props = f.get("properties", {}).copy()
         geom = f.get("geometry", {}) or {}
         coords = geom.get("coordinates") or [None, None]
