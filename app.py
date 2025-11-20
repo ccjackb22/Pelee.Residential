@@ -72,7 +72,34 @@ CITY_TO_COUNTY = {
         "avon": ("lorain", "Avon"),
         "avon lake": ("lorain", "Avon Lake"),
     },
-    "tx": {},
+    "tx": {
+        # if you want city-based detection for Corpus Christi etc later,
+        # we can map them here to Nueces County
+        # "corpus christi": ("nueces", "Corpus Christi"),
+    },
+}
+
+# ---------------------------------------------------------
+# COUNTY BOUNDING BOXES (to kill cross-county junk)
+# ---------------------------------------------------------
+# (state_code, canonical_county) -> bounding box in degrees
+# These are intentionally a little generous but still exclude Dallas/Austin etc.
+BOUNDING_BOXES = {
+    ("tx", "harris"): {
+        # Covers greater Houston / Harris County, excludes Dallas/Austin
+        "min_lat": 28.5,
+        "max_lat": 30.5,
+        "min_lon": -96.5,
+        "max_lon": -94.5,
+    },
+    ("tx", "nueces"): {
+        # Nueces County (Corpus Christi area) bounding box
+        # Based on published parcel extents and county location :contentReference[oaicite:0]{index=0}
+        "min_lat": 27.55,
+        "max_lat": 28.05,
+        "min_lon": -98.05,
+        "max_lon": -97.0,
+    },
 }
 
 # ---------------------------------------------------------
@@ -92,7 +119,13 @@ def canonical_county(name: str):
         .replace(" county", "")
         .replace(" parish", "")
     )
-    return " ".join(name.split())
+    name = " ".join(name.split())
+
+    # Fix known common typos / variants
+    if name == "neuces":
+        name = "nueces"
+
+    return name
 
 def detect_state(query: str):
     q_lower = query.lower()
@@ -131,7 +164,7 @@ def parse_filters(q: str):
                 raw = raw[:-1]
             try:
                 val = float(raw) * mult
-            except:
+            except Exception:
                 continue
 
             window = " ".join(toks[max(0, i - 5): i + 5])
@@ -243,10 +276,7 @@ def pick_dataset(state: str, county: str):
 
     for k in keys:
         base = os.path.basename(k).replace(".geojson", "").lower()
-
-        # Strip everything after "countyname" before "-with..."
         base_root = re.split(r"-with.*", base)[0]
-
         base_clean = canonical_county(base_root)
 
         if base_clean == county_clean:
@@ -255,7 +285,6 @@ def pick_dataset(state: str, county: str):
     if not matches:
         return None
 
-    # Prioritize enriched versions
     for m in matches:
         if "with-values" in m or "with-value" in m:
             return m
@@ -291,29 +320,52 @@ def feature_to_obj(f):
         "lon": geom[0],
     }
 
-def apply_filters(features, income_min, value_min, zip_code):
+def apply_filters(features, income_min, value_min, zip_code, state=None, county=None):
     out = []
+    county_key = None
+    bbox = None
+
+    if state and county:
+        county_key = (state.lower(), canonical_county(county))
+        bbox = BOUNDING_BOXES.get(county_key)
+
     for f in features:
         p = f.get("properties", {})
 
+        # 1) County/geometry sanity check: enforce bounding box if defined
+        if bbox:
+            coords = f.get("geometry", {}).get("coordinates")
+            if not coords or len(coords) < 2:
+                continue
+            lon, lat = coords[0], coords[1]
+            if not (
+                bbox["min_lat"] <= lat <= bbox["max_lat"]
+                and bbox["min_lon"] <= lon <= bbox["max_lon"]
+            ):
+                # Outside the county bounding box -> drop
+                continue
+
+        # 2) ZIP filter
         if zip_code:
             if str(p.get("postcode")) != str(zip_code):
                 continue
 
+        # 3) Income filter
         if income_min:
             v = p.get("DP03_0062E") or p.get("median_income") or p.get("income")
             try:
                 if v is None or float(v) < income_min:
                     continue
-            except:
+            except Exception:
                 continue
 
+        # 4) Home value filter
         if value_min:
             v = p.get("DP04_0089E") or p.get("median_value") or p.get("home_value")
             try:
                 if v is None or float(v) < value_min:
                     continue
-            except:
+            except Exception:
                 continue
 
         out.append(f)
@@ -371,7 +423,7 @@ def search():
         return jsonify({"ok": False, "error": "Failed loading dataset."}), 500
 
     feats = gj.get("features", [])
-    feats = apply_filters(feats, income_min, value_min, zip_code)
+    feats = apply_filters(feats, income_min, value_min, zip_code, state=state, county=county)
 
     total = len(feats)
     feats = feats[:MAX_RESULTS]
@@ -418,9 +470,15 @@ def export():
     except Exception:
         return jsonify({"ok": False, "error": "Failed loading dataset."}), 500
 
-    feats = apply_filters(gj.get("features", []), income_min, value_min, zip_code)
+    feats = apply_filters(
+        gj.get("features", []),
+        income_min,
+        value_min,
+        zip_code,
+        state=state,
+        county=county,
+    )
 
-    # Build CSV
     out = io.StringIO()
     w = csv.writer(out)
 
