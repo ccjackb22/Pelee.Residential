@@ -22,9 +22,7 @@ PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
-# We still use this prefix, but for Harris/Nueces we hard-code keys
 S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts")
-
 MAX_RESULTS = 500
 
 app = Flask(__name__)
@@ -79,7 +77,6 @@ def parse_filters(q: str):
                 value_min = val
                 continue
 
-            # If no keyword, assume income first
             if income_min is None:
                 income_min = val
 
@@ -88,26 +85,24 @@ def parse_filters(q: str):
 
 def resolve_tx_county_dataset(query: str):
     """
-    HARD-CODED resolver for exactly what you care about:
-      - Harris County, TX
-      - Nueces County, TX (incl. "Corpus Christi")
-    Returns (state, county, dataset_key) or (None, None, None) if unsupported.
+    HARD-CODE: Only Harris + Nueces, using your enriched files on S3.
     """
     q = query.lower()
-
-    state = "TX"  # we only support Texas here
+    state = "TX"
 
     if "harris" in q:
         county = "harris"
         key = f"{S3_PREFIX}/tx/harris-with-values-income.geojson"
-        return state, county, key
+        target_prefix = "48201"  # GEOID prefix for Harris County
+        return state, county, key, target_prefix
 
     if "nueces" in q or "corpus christi" in q:
         county = "nueces"
         key = f"{S3_PREFIX}/tx/nueces-with-values-income.geojson"
-        return state, county, key
+        target_prefix = "48355"  # GEOID prefix for Nueces County
+        return state, county, key, target_prefix
 
-    return None, None, None
+    return None, None, None, None
 
 
 def load_geojson(key: str):
@@ -115,14 +110,31 @@ def load_geojson(key: str):
     return json.loads(data)
 
 
+def get_geoid(props: dict):
+    # Be defensive: some scripts might have stored 'geoid' lowercase
+    return (
+        props.get("GEOID")
+        or props.get("geoid")
+        or props.get("TRACT_GEOID")
+        or props.get("tract_geoid")
+    )
+
+
+def is_in_county(props: dict, geoid_prefix: str):
+    gid = get_geoid(props)
+    if not gid:
+        return False
+    gid_str = str(gid)
+    return gid_str.startswith(geoid_prefix)
+
+
 def feature_to_obj(f):
     p = f.get("properties", {}) or {}
     geom = f.get("geometry", {}) or {}
     coords = geom.get("coordinates") or [None, None]
 
-    # Some GeoJSON can nest coords (e.g. MultiPoint, weird structures); handle len==2 case only
+    # Handle nested coordinates if needed
     if isinstance(coords[0], (list, tuple)):
-        # try first point
         try:
             lon, lat = coords[0][0], coords[0][1]
         except Exception:
@@ -144,7 +156,6 @@ def feature_to_obj(f):
         "city": p.get("city") or "",
         "state": p.get("region") or p.get("STUSPS") or "TX",
         "zip": p.get("postcode") or "",
-        # prefer our enriched fields, but fall back to old if present
         "income": (
             p.get("median_income")
             or p.get("B19013_001E")
@@ -162,17 +173,21 @@ def feature_to_obj(f):
     }
 
 
-def apply_filters(features, income_min, value_min, zip_code):
+def apply_filters(features, income_min, value_min, zip_code, geoid_prefix):
     out = []
     for f in features:
         p = f.get("properties", {}) or {}
 
-        # ZIP filter
+        # 1) Enforce county via GEOID prefix to avoid Dallas/Austin leakage
+        if geoid_prefix and not is_in_county(p, geoid_prefix):
+            continue
+
+        # 2) ZIP filter
         if zip_code:
             if str(p.get("postcode")) != str(zip_code):
                 continue
 
-        # income filter
+        # 3) Income filter
         if income_min:
             v = (
                 p.get("median_income")
@@ -186,7 +201,7 @@ def apply_filters(features, income_min, value_min, zip_code):
             except Exception:
                 continue
 
-        # value filter
+        # 4) Home value filter
         if value_min:
             v = (
                 p.get("median_value")
@@ -205,7 +220,7 @@ def apply_filters(features, income_min, value_min, zip_code):
 
 
 # ---------------------------------------------------------
-# AUTH ROUTES
+# AUTH
 # ---------------------------------------------------------
 
 @app.route("/login", methods=["GET", "POST"])
@@ -237,7 +252,6 @@ def index():
 
 @app.route("/health")
 def health():
-    # Simple health endpoint similar to what you've used before
     return jsonify({
         "ok": True,
         "env_aws_access_key": bool(os.getenv("AWS_ACCESS_KEY_ID")),
@@ -257,8 +271,7 @@ def search():
     if not query:
         return jsonify({"ok": False, "error": "Enter a search query."})
 
-    # Only care about Harris + Nueces right now
-    state, county, dataset_key = resolve_tx_county_dataset(q_lower)
+    state, county, dataset_key, geoid_prefix = resolve_tx_county_dataset(q_lower)
     if not state or not county or not dataset_key:
         return jsonify({
             "ok": False,
@@ -277,11 +290,11 @@ def search():
 
     feats = gj.get("features", [])
 
-    # Parse filters
+    # Filters
     zip_code = detect_zip(q_lower)
     income_min, value_min = parse_filters(q_lower)
 
-    feats = apply_filters(feats, income_min, value_min, zip_code)
+    feats = apply_filters(feats, income_min, value_min, zip_code, geoid_prefix)
 
     total = len(feats)
     feats = feats[:MAX_RESULTS]
@@ -312,7 +325,7 @@ def export():
     if not query:
         return jsonify({"ok": False, "error": "Missing query."})
 
-    state, county, dataset_key = resolve_tx_county_dataset(q_lower)
+    state, county, dataset_key, geoid_prefix = resolve_tx_county_dataset(q_lower)
     if not state or not county or not dataset_key:
         return jsonify({
             "ok": False,
@@ -332,9 +345,8 @@ def export():
 
     zip_code = detect_zip(q_lower)
     income_min, value_min = parse_filters(q_lower)
-    feats = apply_filters(feats, income_min, value_min, zip_code)
+    feats = apply_filters(feats, income_min, value_min, zip_code, geoid_prefix)
 
-    # Build CSV
     out = io.StringIO()
     w = csv.writer(out)
 
