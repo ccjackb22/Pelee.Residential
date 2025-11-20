@@ -5,7 +5,7 @@ import csv
 import re
 from flask import (
     Flask, render_template, request, jsonify,
-    redirect, url_for, session, send_file
+    redirect, url_for, session, send_file, Response
 )
 import boto3
 from botocore.exceptions import ClientError
@@ -45,7 +45,6 @@ def parse_filters(q: str):
     Parse phrases like:
       - "over 200k income"
       - "homes above 500000"
-      - "value over 800k"
     Returns (income_min, value_min)
     """
     q = q.lower().replace("$", "").replace(",", "")
@@ -64,6 +63,7 @@ def parse_filters(q: str):
             if raw.endswith("m"):
                 mult = 1_000_000
                 raw = raw[:-1]
+
             try:
                 val = float(raw) * mult
             except Exception:
@@ -85,22 +85,23 @@ def parse_filters(q: str):
 
 def resolve_tx_county_dataset(query: str):
     """
-    HARD-CODE: Only Harris + Nueces, using your enriched files on S3.
+    HARD CODED:
+    Only Harris + Nueces (Corpus Christi) right now.
     """
     q = query.lower()
     state = "TX"
 
-    if "harris" in q:
+    if "harris" in q or "houston" in q:
         county = "harris"
         key = f"{S3_PREFIX}/tx/harris-with-values-income.geojson"
-        target_prefix = "48201"  # GEOID prefix for Harris County
-        return state, county, key, target_prefix
+        geoid_prefix = "48201"
+        return state, county, key, geoid_prefix
 
-    if "nueces" in q or "corpus christi" in q:
+    if "nueces" in q or "corpus" in q or "corpus christi" in q:
         county = "nueces"
         key = f"{S3_PREFIX}/tx/nueces-with-values-income.geojson"
-        target_prefix = "48355"  # GEOID prefix for Nueces County
-        return state, county, key, target_prefix
+        geoid_prefix = "48355"
+        return state, county, key, geoid_prefix
 
     return None, None, None, None
 
@@ -111,7 +112,6 @@ def load_geojson(key: str):
 
 
 def get_geoid(props: dict):
-    # Be defensive: some scripts might have stored 'geoid' lowercase
     return (
         props.get("GEOID")
         or props.get("geoid")
@@ -124,8 +124,7 @@ def is_in_county(props: dict, geoid_prefix: str):
     gid = get_geoid(props)
     if not gid:
         return False
-    gid_str = str(gid)
-    return gid_str.startswith(geoid_prefix)
+    return str(gid).startswith(geoid_prefix)
 
 
 def feature_to_obj(f):
@@ -133,7 +132,6 @@ def feature_to_obj(f):
     geom = f.get("geometry", {}) or {}
     coords = geom.get("coordinates") or [None, None]
 
-    # Handle nested coordinates if needed
     if isinstance(coords[0], (list, tuple)):
         try:
             lon, lat = coords[0][0], coords[0][1]
@@ -178,16 +176,13 @@ def apply_filters(features, income_min, value_min, zip_code, geoid_prefix):
     for f in features:
         p = f.get("properties", {}) or {}
 
-        # 1) Enforce county via GEOID prefix to avoid Dallas/Austin leakage
         if geoid_prefix and not is_in_county(p, geoid_prefix):
             continue
 
-        # 2) ZIP filter
         if zip_code:
             if str(p.get("postcode")) != str(zip_code):
                 continue
 
-        # 3) Income filter
         if income_min:
             v = (
                 p.get("median_income")
@@ -201,7 +196,6 @@ def apply_filters(features, income_min, value_min, zip_code, geoid_prefix):
             except Exception:
                 continue
 
-        # 4) Home value filter
         if value_min:
             v = (
                 p.get("median_value")
@@ -216,6 +210,7 @@ def apply_filters(features, income_min, value_min, zip_code, geoid_prefix):
                 continue
 
         out.append(f)
+
     return out
 
 
@@ -240,7 +235,7 @@ def logout():
 
 
 # ---------------------------------------------------------
-# CORE ROUTES
+# MAIN ROUTES
 # ---------------------------------------------------------
 
 @app.route("/")
@@ -272,28 +267,18 @@ def search():
         return jsonify({"ok": False, "error": "Enter a search query."})
 
     state, county, dataset_key, geoid_prefix = resolve_tx_county_dataset(q_lower)
-    if not state or not county or not dataset_key:
-        return jsonify({
-            "ok": False,
-            "error": "Right now, this tool only supports Harris County, TX and Nueces County, TX (Corpus Christi)."
-        })
+    if not dataset_key:
+        return jsonify({"ok": False, "error": "Right now this only supports Harris County and Nueces County (Corpus Christi)."}), 400
 
-    # Load dataset
     try:
         gj = load_geojson(dataset_key)
     except Exception as e:
-        return jsonify({
-            "ok": False,
-            "error": f"Failed loading dataset: {dataset_key}",
-            "details": str(e),
-        }), 500
+        return jsonify({"ok": False, "error": str(e)}), 500
 
     feats = gj.get("features", [])
 
-    # Filters
     zip_code = detect_zip(q_lower)
     income_min, value_min = parse_filters(q_lower)
-
     feats = apply_filters(feats, income_min, value_min, zip_code, geoid_prefix)
 
     total = len(feats)
@@ -304,7 +289,6 @@ def search():
         "query": query,
         "state": state,
         "county": county,
-        "city": None,
         "zip": zip_code,
         "dataset_key": dataset_key,
         "total": total,
@@ -312,6 +296,10 @@ def search():
         "results": [feature_to_obj(f) for f in feats],
     })
 
+
+# ---------------------------------------------------------
+# STREAMING CSV EXPORT  (FIXES RENDER TIMEOUTS)
+# ---------------------------------------------------------
 
 @app.route("/export", methods=["POST"])
 def export():
@@ -326,20 +314,13 @@ def export():
         return jsonify({"ok": False, "error": "Missing query."})
 
     state, county, dataset_key, geoid_prefix = resolve_tx_county_dataset(q_lower)
-    if not state or not county or not dataset_key:
-        return jsonify({
-            "ok": False,
-            "error": "Export currently only supported for Harris County, TX and Nueces County, TX."
-        })
+    if not dataset_key:
+        return jsonify({"ok": False, "error": "Export only for Harris + Nueces at this time."}), 400
 
     try:
         gj = load_geojson(dataset_key)
     except Exception as e:
-        return jsonify({
-            "ok": False,
-            "error": f"Failed loading dataset: {dataset_key}",
-            "details": str(e),
-        }), 500
+        return jsonify({"ok": False, "error": str(e)}), 500
 
     feats = gj.get("features", [])
 
@@ -347,71 +328,53 @@ def export():
     income_min, value_min = parse_filters(q_lower)
     feats = apply_filters(feats, income_min, value_min, zip_code, geoid_prefix)
 
-    out = io.StringIO()
-    w = csv.writer(out)
+    def generate():
+        yield "address_number,street,unit,city,state,zip,income,value,lat,lon\n"
 
-    w.writerow([
-        "address_number",
-        "street",
-        "unit",
-        "city",
-        "state",
-        "zip",
-        "income",
-        "value",
-        "lat",
-        "lon",
-    ])
+        for f in feats:
+            p = f.get("properties", {}) or {}
+            geom = f.get("geometry", {}) or {}
+            coords = geom.get("coordinates") or [None, None]
 
-    for f in feats:
-        p = f.get("properties", {}) or {}
-        geom = f.get("geometry", {}) or {}
-        coords = geom.get("coordinates") or [None, None]
-
-        if isinstance(coords[0], (list, tuple)):
-            try:
+            # flatten nested coord arrays
+            if isinstance(coords[0], (list, tuple)):
                 lon, lat = coords[0][0], coords[0][1]
-            except Exception:
-                lon, lat = None, None
-        else:
-            try:
+            else:
                 lon, lat = coords[0], coords[1]
-            except Exception:
-                lon, lat = None, None
 
-        num = p.get("number") or p.get("house_number") or ""
-        street = p.get("street") or p.get("road") or ""
-        unit = p.get("unit") or ""
+            num = p.get("number") or p.get("house_number") or ""
+            street = p.get("street") or p.get("road") or ""
+            unit = p.get("unit") or ""
+            city = p.get("city") or ""
+            st = p.get("region") or p.get("STUSPS") or "TX"
+            zipc = p.get("postcode") or ""
 
-        city = p.get("city") or ""
-        st = p.get("region") or p.get("STUSPS") or "TX"
-        zipc = p.get("postcode") or ""
+            income = (
+                p.get("median_income")
+                or p.get("B19013_001E")
+                or p.get("DP03_0062E")
+                or p.get("income")
+                or ""
+            )
+            value = (
+                p.get("median_value")
+                or p.get("B25077_001E")
+                or p.get("DP04_0089E")
+                or p.get("home_value")
+                or ""
+            )
 
-        income = (
-            p.get("median_income")
-            or p.get("B19013_001E")
-            or p.get("DP03_0062E")
-            or p.get("income")
-        )
-        value = (
-            p.get("median_value")
-            or p.get("B25077_001E")
-            or p.get("DP04_0089E")
-            or p.get("home_value")
-        )
-
-        w.writerow([num, street, unit, city, st, zipc, income, value, lat, lon])
-
-    mem = io.BytesIO(out.getvalue().encode("utf-8"))
-    mem.seek(0)
+            row = f"{num},{street},{unit},{city},{st},{zipc},{income},{value},{lat},{lon}\n"
+            yield row
 
     filename = f"pelee_export_{county}_{state}.csv"
 
-    return send_file(
-        mem,
+    return Response(
+        generate(),
         mimetype="text/csv",
-        as_attachment=True,
-        download_name=filename,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
     )
 
 
