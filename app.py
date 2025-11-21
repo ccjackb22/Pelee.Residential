@@ -12,7 +12,6 @@ from flask import (
     redirect,
     url_for,
     session,
-    send_file,   # still used nowhere now, but fine to keep
     Response,
 )
 import boto3
@@ -30,8 +29,9 @@ PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
-# Your enriched county files live here:
-S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts")
+# IMPORTANT: use the CLEANED county files
+# s3://residential-data-jack/merged_with_tracts_acs_clean/{state}/{county}-clean.geojson
+S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts_acs_clean")
 
 # Max results for on-screen search results
 MAX_RESULTS = 500
@@ -41,9 +41,143 @@ app.secret_key = SECRET_KEY
 
 s3_client = boto3.client("s3", region_name=AWS_REGION)
 
+# ---------------------------------------------------------
+# STATE + COUNTY INDEX
+# ---------------------------------------------------------
+
+STATE_NAME_TO_ABBR = {
+    "alabama": "AL",
+    "alaska": "AK",
+    "arizona": "AZ",
+    "arkansas": "AR",
+    "california": "CA",
+    "colorado": "CO",
+    "connecticut": "CT",
+    "delaware": "DE",
+    "florida": "FL",
+    "georgia": "GA",
+    "hawaii": "HI",
+    "idaho": "ID",
+    "illinois": "IL",
+    "indiana": "IN",
+    "iowa": "IA",
+    "kansas": "KS",
+    "kentucky": "KY",
+    "louisiana": "LA",
+    "maine": "ME",
+    "maryland": "MD",
+    "massachusetts": "MA",
+    "michigan": "MI",
+    "minnesota": "MN",
+    "mississippi": "MS",
+    "missouri": "MO",
+    "montana": "MT",
+    "nebraska": "NE",
+    "nevada": "NV",
+    "new hampshire": "NH",
+    "new jersey": "NJ",
+    "new mexico": "NM",
+    "new york": "NY",
+    "north carolina": "NC",
+    "north dakota": "ND",
+    "ohio": "OH",
+    "oklahoma": "OK",
+    "oregon": "OR",
+    "pennsylvania": "PA",
+    "rhode island": "RI",
+    "south carolina": "SC",
+    "south dakota": "SD",
+    "tennessee": "TN",
+    "texas": "TX",
+    "utah": "UT",
+    "vermont": "VT",
+    "virginia": "VA",
+    "washington": "WA",
+    "west virginia": "WV",
+    "wisconsin": "WI",
+    "wyoming": "WY",
+    "district of columbia": "DC",
+    "washington dc": "DC",
+}
+
+STATE_ABBRS = set(STATE_NAME_TO_ABBR.values())
+
+
+def normalize_slug(s: str) -> str:
+    """Lowercase + collapse to a-z0-9 + underscores."""
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    return s
+
+
+def build_county_index():
+    """
+    Build index from S3:
+      merged_with_tracts_acs_clean/{state}/{county_slug}-clean.geojson
+    Returns:
+      {
+        "CA": [
+           {"slug": "kern", "norm": "kern", "key": ".../ca/kern-clean.geojson"},
+           ...
+        ],
+        ...
+      }
+    """
+    index = {}
+    prefix = S3_PREFIX.rstrip("/") + "/"
+    continuation = None
+
+    while True:
+        kwargs = {"Bucket": S3_BUCKET, "Prefix": prefix}
+        if continuation:
+            kwargs["ContinuationToken"] = continuation
+
+        resp = s3_client.list_objects_v2(**kwargs)
+        contents = resp.get("Contents", [])
+
+        for obj in contents:
+            key = obj["Key"]
+            if not key.endswith("-clean.geojson"):
+                continue
+
+            # Strip the prefix and split: state_folder / filename
+            rest = key[len(prefix) :]
+            parts = rest.split("/")
+            if len(parts) != 2:
+                continue
+
+            state_folder, filename = parts
+            state_abbr = state_folder.upper()
+            if state_abbr not in STATE_ABBRS:
+                # ignore territories / weird folders for now
+                continue
+
+            slug = filename.replace("-clean.geojson", "")
+            norm = normalize_slug(slug)
+
+            entry = {"slug": slug, "norm": norm, "key": key}
+            index.setdefault(state_abbr, []).append(entry)
+
+        if resp.get("IsTruncated"):
+            continuation = resp.get("NextContinuationToken")
+        else:
+            break
+
+    return index
+
+
+COUNTY_INDEX = {}
+COUNTY_INDEX_ERROR = None
+try:
+    COUNTY_INDEX = build_county_index()
+except Exception as e:
+    COUNTY_INDEX_ERROR = str(e)
+    COUNTY_INDEX = {}
+
 
 # ---------------------------------------------------------
-# HELPERS
+# HELPERS (ZIP / FILTERS / GEOID)
 # ---------------------------------------------------------
 
 def detect_zip(query: str):
@@ -94,26 +228,82 @@ def parse_filters(q: str):
     return income_min, value_min
 
 
-def resolve_tx_county_dataset(query: str):
+def detect_state(query_original: str):
     """
-    HARD-CODE: Only Harris + Nueces, using your enriched files on S3.
+    Detect US state from full name ("california") or 2-letter code ("CA").
     """
-    q = query.lower()
-    state = "TX"
+    q_lower = query_original.lower()
 
-    if "harris" in q:
-        county = "harris"
-        key = f"{S3_PREFIX}/tx/harris-with-values-income.geojson"
-        target_prefix = "48201"  # GEOID prefix for Harris County
-        return state, county, key, target_prefix
+    # 1) full state name
+    for name, abbr in STATE_NAME_TO_ABBR.items():
+        if name in q_lower:
+            return abbr
 
-    if "nueces" in q or "corpus christi" in q:
-        county = "nueces"
-        key = f"{S3_PREFIX}/tx/nueces-with-values-income.geojson"
-        target_prefix = "48355"  # GEOID prefix for Nueces County
-        return state, county, key, target_prefix
+    # 2) uppercase 2-letter tokens (avoids "in", "or", "me" false positives)
+    for token in re.findall(r"\b([A-Z]{2})\b", query_original):
+        if token in STATE_ABBRS:
+            return token
 
-    return None, None, None, None
+    return None
+
+
+def resolve_dataset_from_query(query: str):
+    """
+    Resolve (state_abbr, county_slug, s3_key, message) from NATURAL query.
+
+    Uses COUNTY_INDEX built from S3. We:
+      - detect state
+      - find a county in that state whose slug appears in the query
+    """
+    if COUNTY_INDEX_ERROR:
+        return None, None, None, f"County index failed to build from S3: {COUNTY_INDEX_ERROR}"
+
+    if not COUNTY_INDEX:
+        return None, None, None, "No county index available. Check S3_PREFIX / AWS credentials."
+
+    state_abbr = detect_state(query)
+    if not state_abbr:
+        return None, None, None, (
+            "Couldn't detect a US state in that query. "
+            "Try including a state, e.g. 'addresses in Kern County CA'."
+        )
+
+    if state_abbr not in COUNTY_INDEX:
+        return None, None, None, f"No cleaned datasets found for state {state_abbr}."
+
+    q_lower = query.lower()
+    q_norm = "_" + normalize_slug(q_lower) + "_"
+
+    # Special alias: Corpus Christi, TX -> Nueces County
+    if state_abbr == "TX" and "corpus christi" in q_lower:
+        for entry in COUNTY_INDEX[state_abbr]:
+            if "nueces" in entry["slug"]:
+                return state_abbr, entry["slug"], entry["key"], None
+
+    candidates = []
+    for entry in COUNTY_INDEX[state_abbr]:
+        norm = entry["norm"]
+        pattern = "_" + norm + "_"
+        if pattern in q_norm:
+            candidates.append(entry)
+
+    if not candidates:
+        # If they explicitly say "county", try to capture the word before it and fuzzy match
+        # but keep it simple: nudge them to mention the county name as your files use it.
+        return None, None, None, (
+            f"Couldn't detect a county name in {state_abbr} from that query. "
+            "Try something like 'addresses in Kern County CA' or "
+            "'homes in Miami-Dade County Florida over 200k income'."
+        )
+
+    if len(candidates) == 1:
+        chosen = candidates[0]
+    else:
+        # Prefer the longest norm (e.g. "maui_county" vs "maui")
+        candidates.sort(key=lambda x: len(x["norm"]), reverse=True)
+        chosen = candidates[0]
+
+    return state_abbr, chosen["slug"], chosen["key"], None
 
 
 def load_geojson(key: str):
@@ -131,12 +321,28 @@ def get_geoid(props: dict):
     )
 
 
+def infer_geoid_prefix(features):
+    """
+    Look at features to infer a 5-digit state+county FIPS prefix from the GEOID.
+    """
+    for f in features:
+        p = f.get("properties", {}) or {}
+        gid = get_geoid(p)
+        if not gid:
+            continue
+        s = str(gid)
+        if len(s) >= 5:
+            return s[:5]
+    return None
+
+
 def is_in_county(props: dict, geoid_prefix: str):
+    if not geoid_prefix:
+        return True
     gid = get_geoid(props)
     if not gid:
         return False
-    gid_str = str(gid)
-    return gid_str.startswith(geoid_prefix)
+    return str(gid).startswith(geoid_prefix)
 
 
 def get_zip_from_props(p: dict):
@@ -159,7 +365,6 @@ def feature_to_obj(f):
     geom = f.get("geometry", {}) or {}
 
     coords = geom.get("coordinates") or [None, None]
-    # Handle nested coordinates if needed
     if isinstance(coords[0], (list, tuple)):
         try:
             lon, lat = coords[0][0], coords[0][1]
@@ -171,7 +376,6 @@ def feature_to_obj(f):
         except Exception:
             lon, lat = None, None
 
-    # Handle both upper + lower case for address fields
     num = p.get("number") or p.get("NUMBER") or p.get("house_number") or ""
     street = p.get("street") or p.get("STREET") or p.get("road") or ""
     unit = p.get("unit") or p.get("UNIT") or ""
@@ -181,8 +385,10 @@ def feature_to_obj(f):
         p.get("region")
         or p.get("REGION")
         or p.get("STUSPS")
-        or "TX"
     )
+    if not st:
+        st = ""
+
     zipc = get_zip_from_props(p)
 
     income = (
@@ -199,9 +405,7 @@ def feature_to_obj(f):
     )
 
     return {
-        "address": " ".join(
-            str(x) for x in [num, street, unit] if x
-        ),
+        "address": " ".join(str(x) for x in [num, street, unit] if x),
         "number": num,
         "street": street,
         "unit": unit,
@@ -220,7 +424,7 @@ def apply_filters(features, income_min, value_min, zip_code, geoid_prefix):
     for f in features:
         p = f.get("properties", {}) or {}
 
-        # 1) Enforce county via GEOID prefix to avoid Dallas/Austin leakage
+        # 1) enforce county via GEOID prefix, if available
         if geoid_prefix and not is_in_county(p, geoid_prefix):
             continue
 
@@ -299,6 +503,10 @@ def health():
         "ok": True,
         "env_aws_access_key": bool(os.getenv("AWS_ACCESS_KEY_ID")),
         "env_openai": bool(os.getenv("OPENAI_API_KEY")),
+        "county_index_built": bool(COUNTY_INDEX),
+        "county_index_error": COUNTY_INDEX_ERROR,
+        "bucket": S3_BUCKET,
+        "prefix": S3_PREFIX,
     })
 
 
@@ -309,16 +517,14 @@ def search():
 
     data = request.get_json(silent=True) or {}
     query = (data.get("query") or "").strip()
-    q_lower = query.lower()
-
     if not query:
         return jsonify({"ok": False, "error": "Enter a search query."})
 
-    state, county, dataset_key, geoid_prefix = resolve_tx_county_dataset(q_lower)
-    if not state or not county or not dataset_key:
+    state, county_slug, dataset_key, msg = resolve_dataset_from_query(query)
+    if not dataset_key:
         return jsonify({
             "ok": False,
-            "error": "Right now, this tool only supports Harris County, TX and Nueces County, TX (Corpus Christi)."
+            "error": msg or "Could not resolve a county/state dataset from that query.",
         })
 
     # Load dataset
@@ -333,7 +539,11 @@ def search():
 
     feats = gj.get("features", [])
 
+    # Infer GEOID prefix for safety
+    geoid_prefix = infer_geoid_prefix(feats)
+
     # Filters
+    q_lower = query.lower()
     zip_code = detect_zip(q_lower)
     income_min, value_min = parse_filters(q_lower)
 
@@ -346,7 +556,7 @@ def search():
         "ok": True,
         "query": query,
         "state": state,
-        "county": county,
+        "county": county_slug,
         "city": None,
         "zip": zip_code,
         "dataset_key": dataset_key,
@@ -357,7 +567,7 @@ def search():
 
 
 # ---------------------------------------------------------
-# EXPORT (STREAMING / OPTION B)
+# EXPORT (STREAMING CSV)
 # ---------------------------------------------------------
 
 @app.route("/export", methods=["POST"])
@@ -367,16 +577,14 @@ def export():
 
     data = request.get_json(silent=True) or {}
     query = (data.get("query") or "").strip()
-    q_lower = query.lower()
-
     if not query:
         return jsonify({"ok": False, "error": "Missing query."})
 
-    state, county, dataset_key, geoid_prefix = resolve_tx_county_dataset(q_lower)
-    if not state or not county or not dataset_key:
+    state, county_slug, dataset_key, msg = resolve_dataset_from_query(query)
+    if not dataset_key:
         return jsonify({
             "ok": False,
-            "error": "Export currently only supported for Harris County, TX and Nueces County, TX."
+            "error": msg or "Could not resolve a county/state dataset from that query.",
         })
 
     try:
@@ -389,18 +597,16 @@ def export():
         }), 500
 
     feats = gj.get("features", [])
+    geoid_prefix = infer_geoid_prefix(feats)
 
+    q_lower = query.lower()
     zip_code = detect_zip(q_lower)
     income_min, value_min = parse_filters(q_lower)
     feats = apply_filters(feats, income_min, value_min, zip_code, geoid_prefix)
 
-    filename = f"pelee_export_{county}_{state}.csv"
+    filename = f"pelee_export_{county_slug}_{state}.csv"
 
     def generate():
-        """
-        Stream CSV rows using a small in-memory buffer + csv.writer.
-        This keeps memory low and avoids Render timeouts on huge files.
-        """
         buffer = io.StringIO()
         writer = csv.writer(buffer)
 
@@ -446,8 +652,10 @@ def export():
                 p.get("region")
                 or p.get("REGION")
                 or p.get("STUSPS")
-                or "TX"
             )
+            if not st:
+                st = ""
+
             zipc = get_zip_from_props(p)
 
             income = (
