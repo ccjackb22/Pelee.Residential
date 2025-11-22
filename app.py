@@ -21,15 +21,6 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 
 # ---------------------------------------------------------
-# LOGGING
-# ---------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------
 # CONFIG
 # ---------------------------------------------------------
 load_dotenv()
@@ -40,24 +31,35 @@ PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
-# CLEANED dataset prefix (what your cleaner wrote to)
-CLEAN_PREFIX = "merged_with_tracts_acs_clean"
+CLEAN_PREFIX = os.getenv("CLEAN_PREFIX", "merged_with_tracts_acs_clean")
 
-# Hard limit for loading whole file into memory (bytes)
-MAX_IN_MEMORY_BYTES = 350_000_000
+# Max size we will load in-memory for the web tool
+MAX_BYTES_WEB = int(os.getenv("MAX_BYTES_WEB", "350000000"))  # ~350MB
 
-# Max number of rows for on-screen display
-MAX_RESULTS = 500
+MAX_RESULTS = int(os.getenv("MAX_RESULTS", "500"))
 
+# ---------------------------------------------------------
+# LOGGING
+# ---------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------
+# FLASK + S3
+# ---------------------------------------------------------
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
 s3_client = boto3.client("s3", region_name=AWS_REGION)
 
 # ---------------------------------------------------------
-# STATE NAMES
+# STATE / COUNTY METADATA
 # ---------------------------------------------------------
-STATE_CODES = {
+
+STATE_NAME_TO_CODE = {
     "alabama": "al",
     "alaska": "ak",
     "arizona": "az",
@@ -110,30 +112,26 @@ STATE_CODES = {
     "wyoming": "wy",
 }
 
-TWO_LETTER_CODES = set(STATE_CODES.values())
+STATE_CODES = set(STATE_NAME_TO_CODE.values())
 
-# ---------------------------------------------------------
-# DATASET INDEX
-# ---------------------------------------------------------
-# Each entry: {
-#   "state": "oh",
-#   "county": "cuyahoga",
-#   "key": "merged_with_tracts_acs_clean/oh/cuyahoga-clean.geojson",
-#   "size": 529680486
+# For 2-letter codes that are common English words, we avoid auto-detecting them.
+AMBIGUOUS_CODES = {"in", "or", "me", "hi", "ok", "la"}
+
+# DATASETS[(state_code, county_slug)] = {
+#   "key": s3_key,
+#   "size": size_bytes,
+#   "synonyms": [ "harris", "harris county", "harris county texas", ... ],
 # }
-DATASETS = []  # list of dicts
-DATASET_BY_STATE_COUNTY = {}  # (state, county) -> dict
+DATASETS = {}
 
 
 def scan_cleaned_datasets():
     """
-    Scan S3 once on boot to discover all cleaned county-level datasets.
-    Looks for:
-        merged_with_tracts_acs_clean/<state>/<county>-clean.geojson
+    Scan S3 for all *-clean.geojson under CLEAN_PREFIX and build
+    DATASETS index + synonyms for county matching.
     """
-    global DATASETS, DATASET_BY_STATE_COUNTY
-    DATASETS = []
-    DATASET_BY_STATE_COUNTY = {}
+    global DATASETS
+    DATASETS = {}
 
     logger.info(
         "[BOOT] Scanning S3 bucket=%s prefix=%s/ for *-clean.geojson ...",
@@ -144,10 +142,12 @@ def scan_cleaned_datasets():
     paginator = s3_client.get_paginator("list_objects_v2")
     pages = paginator.paginate(Bucket=S3_BUCKET, Prefix=f"{CLEAN_PREFIX}/")
 
-    total = 0
+    synonyms_count = 0
+    dataset_count = 0
+
     for page in pages:
         for obj in page.get("Contents", []):
-            key = obj["Key"]  # e.g. merged_with_tracts_acs_clean/oh/cuyahoga-clean.geojson
+            key = obj["Key"]
             if not key.endswith("-clean.geojson"):
                 continue
 
@@ -155,25 +155,53 @@ def scan_cleaned_datasets():
             if len(parts) != 3:
                 continue
 
-            _, state, filename = parts
+            _, state, fname = parts
             state = state.lower()
-            if state not in TWO_LETTER_CODES:
+            if state not in STATE_CODES:
                 continue
 
-            county = filename.replace("-clean.geojson", "").lower()
-            size = obj.get("Size", 0)
+            county_slug = fname.replace("-clean.geojson", "").lower()
+            base_name = county_slug.replace("_", " ")
 
-            meta = {
-                "state": state,
-                "county": county,
+            # Build synonyms for matching, e.g.:
+            #   "harris"
+            #   "harris county"
+            #   "harris co"
+            #   "harris county tx"
+            synonyms = set()
+            synonyms.add(base_name)
+            synonyms.add(f"{base_name} county")
+            synonyms.add(f"{base_name} co")
+
+            # Attach state variants
+            full_state_name = None
+            for name, code in STATE_NAME_TO_CODE.items():
+                if code == state:
+                    full_state_name = name
+                    break
+
+            if full_state_name:
+                synonyms.add(f"{base_name} {full_state_name}")
+                synonyms.add(f"{base_name} county {full_state_name}")
+
+            synonyms.add(f"{base_name} {state}")
+            synonyms.add(f"{base_name} county {state}")
+
+            DATASETS[(state, county_slug)] = {
                 "key": key,
-                "size": size,
+                "size": obj["Size"],
+                "synonyms": list(synonyms),
             }
-            DATASETS.append(meta)
-            DATASET_BY_STATE_COUNTY[(state, county)] = meta
-            total += 1
+            dataset_count += 1
+            synonyms_count += len(synonyms)
 
-    logger.info("[BOOT] Indexed %d cleaned county datasets.", total)
+    logger.info(
+        "[BOOT] Indexed %d cleaned county datasets.", dataset_count
+    )
+    logger.info(
+        "[BOOT] Built search index with %d (state,county) synonyms.",
+        synonyms_count,
+    )
 
 
 scan_cleaned_datasets()
@@ -181,6 +209,56 @@ scan_cleaned_datasets()
 # ---------------------------------------------------------
 # HELPERS: PARSING QUERY
 # ---------------------------------------------------------
+
+
+def detect_state(query: str):
+    """
+    Try to detect state from the query using:
+      1) Full state names (e.g. 'ohio')
+      2) 2-letter uppercase codes (e.g. 'OH'), avoiding ambiguous ones.
+    Returns a 2-letter state code or None.
+    """
+    q_lower = query.lower()
+
+    # 1) Full name
+    for name, code in STATE_NAME_TO_CODE.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", q_lower):
+            return code
+
+    # 2) 2-letter codes in uppercase tokens
+    tokens = re.findall(r"\b([A-Z]{2})\b", query)
+    for t in tokens:
+        code = t.lower()
+        if code in STATE_CODES and code not in AMBIGUOUS_CODES:
+            return code
+
+    return None
+
+
+def detect_county(query: str, state_code: str):
+    """
+    Given a query and a state_code (e.g. 'oh'),
+    find the best matching county using our synonyms.
+    Returns (county_slug, dataset_info) or (None, None).
+    """
+    q_lower = query.lower()
+    best_match = None
+    best_len = 0
+
+    for (st, county_slug), info in DATASETS.items():
+        if st != state_code:
+            continue
+
+        for syn in info["synonyms"]:
+            syn = syn.lower()
+            if syn in q_lower:
+                if len(syn) > best_len:
+                    best_len = len(syn)
+                    best_match = (county_slug, info)
+
+    if best_match:
+        return best_match[0], best_match[1]
+    return None, None
 
 
 def detect_zip(query: str):
@@ -191,8 +269,8 @@ def detect_zip(query: str):
 def parse_filters(q: str):
     """
     Parse things like:
-      "over 200k income", "homes above 500000", "value over 800k"
-    Returns (income_min, value_min)
+      "income over 200k", "homes over 500000", "value above 800k"
+    Returns (income_min, value_min).
     """
     q = q.lower().replace("$", "").replace(",", "")
     toks = q.split()
@@ -201,12 +279,9 @@ def parse_filters(q: str):
     value_min = None
 
     for i, t in enumerate(toks):
-        if t in ("over", "above", "greater", ">", "atleast", "at_least") and i + 1 < len(
-            toks
-        ):
+        if t in ("over", "above", "greater", ">", "atleast", "at_least") and i + 1 < len(toks):
             raw = toks[i + 1]
             mult = 1
-
             if raw.endswith("k"):
                 mult = 1000
                 raw = raw[:-1]
@@ -219,7 +294,7 @@ def parse_filters(q: str):
             except Exception:
                 continue
 
-            window = " ".join(toks[max(0, i - 5) : i + 5])
+            window = " ".join(toks[max(0, i - 5): i + 5])
             if "income" in window:
                 income_min = val
                 continue
@@ -233,134 +308,9 @@ def parse_filters(q: str):
     return income_min, value_min
 
 
-def detect_state(query: str):
-    """
-    Detect state code from full state name or 2-letter code.
-    We avoid matching random 'in' by requiring word boundaries.
-    """
-    q = f" {query.lower()} "
-
-    # First: full names ("ohio", "texas", etc.)
-    for name, code in STATE_CODES.items():
-        if f" {name} " in q:
-            return code
-
-    # Second: 2-letter codes, uppercase in the original query
-    # We check against the original raw query for capital letters.
-    raw = f" {query} "
-
-    for code in TWO_LETTER_CODES:
-        pattern = f" {code.upper()} "
-        if pattern in raw:
-            return code
-
-    return None
-
-
-def normalize_county_slug(county: str) -> str:
-    """
-    Convert county slug like 'saint_louis_city' -> 'saint louis city'
-    """
-    return county.replace("_", " ")
-
-
-def county_matches_query(county_slug: str, q: str) -> bool:
-    """
-    Simple substring match with a few synonyms for saint/st.
-    q is already lowercased here.
-    """
-    canon = normalize_county_slug(county_slug)  # e.g. 'harris', 'fort bend'
-    variants = {canon}
-
-    # Saint / St shortcuts
-    if canon.startswith("st "):
-        variants.add("saint " + canon[3:])
-    if canon.startswith("ste "):
-        variants.add("sainte " + canon[4:])
-
-    # Add ' X county', ' X parish', etc. as variants
-    extra = set()
-    for v in variants:
-        extra.add(f"{v} county")
-        extra.add(f"{v} parish")
-        extra.add(f"{v} borough")
-    variants |= extra
-
-    for v in variants:
-        if v in q:
-            return True
-
-    return False
-
-
-def resolve_location(query: str):
-    """
-    Given a natural-language query, resolve to a specific (state, county, key, size).
-
-    Returns:
-        (state, county, key, size) or (None, None, None, None)
-    """
-    q = query.lower()
-    state = detect_state(query)
-
-    if not state:
-        logger.info("[RESOLVE] Could not detect state from query='%s'", query)
-        return None, None, None, None
-
-    # Find candidate counties for that state
-    candidates = [m for m in DATASETS if m["state"] == state]
-    if not candidates:
-        logger.info("[RESOLVE] No datasets at all for state=%s", state)
-        return None, None, None, None
-
-    # Try to match a county by substring
-    for meta in candidates:
-        county = meta["county"]
-        if county_matches_query(county, q):
-            logger.info(
-                "[RESOLVE] Matched state=%s, county=%s, key=%s, size=%d",
-                state,
-                county,
-                meta["key"],
-                meta["size"],
-            )
-            return meta["state"], meta["county"], meta["key"], meta["size"]
-
-    logger.info(
-        "[RESOLVE] No county match for state=%s in query='%s' (candidates=%d)",
-        state,
-        query,
-        len(candidates),
-    )
-    return None, None, None, None
-
-
 # ---------------------------------------------------------
-# DATA LOADING + FILTERING
+# HELPERS: DATA LOADING + FILTERING
 # ---------------------------------------------------------
-
-
-def load_geojson_full(key: str, size: int):
-    """
-    Load entire GeoJSON into memory for "normal" sized counties.
-    We enforce a guardrail by size.
-    """
-    if size > MAX_IN_MEMORY_BYTES:
-        raise RuntimeError(
-            f"Dataset {key} is too large to load in-memory ({size} bytes). "
-            f"Max allowed is {MAX_IN_MEMORY_BYTES} bytes."
-        )
-
-    logger.info("[LOAD] Fetching full GeoJSON key=%s size=%d", key, size)
-
-    try:
-        obj = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
-    except ClientError as e:
-        logger.error("[LOAD] S3 get_object failed for key=%s: %s", key, e)
-        raise
-
-    body = obj["Body"].read()
-    return json.loads(body)
 
 
 def get_zip_from_props(p: dict):
@@ -372,12 +322,45 @@ def get_zip_from_props(p: dict):
     )
 
 
+def load_geojson_from_s3(key: str, size: int):
+    """
+    Load a GeoJSON from S3 into memory, enforcing MAX_BYTES_WEB.
+    """
+    if size > MAX_BYTES_WEB:
+        raise ValueError(
+            f"Dataset {key} is too large to load in-memory ({size} bytes). "
+            f"Max allowed is {MAX_BYTES_WEB} bytes."
+        )
+
+    logger.info("[LOAD] Fetching key=%s size=%d", key, size)
+    resp = s3_client.get_object(Bucket=S3_BUCKET, Key=key)
+    body = resp["Body"].read()
+
+    if len(body) != size:
+        logger.info(
+            "[LOAD] Size mismatch for key=%s: head=%d, body=%d",
+            key,
+            size,
+            len(body),
+        )
+
+    if len(body) > MAX_BYTES_WEB:
+        raise ValueError(
+            f"Dataset {key} expanded beyond in-memory limit ({len(body)} bytes)."
+        )
+
+    gj = json.loads(body)
+    return gj
+
+
 def feature_to_obj(f):
     p = f.get("properties", {}) or {}
     geom = f.get("geometry", {}) or {}
 
     coords = geom.get("coordinates") or [None, None]
-    if isinstance(coords[0], (list, tuple)):
+
+    if isinstance(coords, (list, tuple)) and coords and isinstance(coords[0], (list, tuple)):
+        # e.g. polygons; take first point
         try:
             lon, lat = coords[0][0], coords[0][1]
         except Exception:
@@ -429,13 +412,11 @@ def apply_filters(features, income_min, value_min, zip_code):
     for f in features:
         p = f.get("properties", {}) or {}
 
-        # ZIP filter
         if zip_code:
             feature_zip = str(get_zip_from_props(p))
             if feature_zip != str(zip_code):
                 continue
 
-        # Income filter
         if income_min:
             v = (
                 p.get("median_income")
@@ -449,7 +430,6 @@ def apply_filters(features, income_min, value_min, zip_code):
             except Exception:
                 continue
 
-        # Value filter
         if value_min:
             v = (
                 p.get("median_value")
@@ -472,14 +452,15 @@ def apply_filters(features, income_min, value_min, zip_code):
 # AUTH
 # ---------------------------------------------------------
 
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("password") == PASSWORD:
-            session["authed"] = True
+        pw = request.form.get("password", "")
+        if pw == PASSWORD:
             logger.info("[AUTH] Login success")
+            session["authed"] = True
             return redirect(url_for("index"))
+        logger.info("[AUTH] Login failed")
         return render_template("login.html", error="Invalid password.")
     return render_template("login.html")
 
@@ -494,7 +475,6 @@ def logout():
 # CORE ROUTES
 # ---------------------------------------------------------
 
-
 @app.route("/")
 def index():
     if not session.get("authed"):
@@ -508,7 +488,8 @@ def health():
         {
             "ok": True,
             "datasets_indexed": len(DATASETS),
-            "aws_region": AWS_REGION,
+            "env_aws_access_key": bool(os.getenv("AWS_ACCESS_KEY_ID")),
+            "env_openai": bool(os.getenv("OPENAI_API_KEY")),
         }
     )
 
@@ -521,45 +502,62 @@ def search():
     data = request.get_json(silent=True) or {}
     query = (data.get("query") or "").strip()
 
-    logger.info("[SEARCH] Incoming query='%s'", query)
-
     if not query:
         return jsonify({"ok": False, "error": "Enter a search query."})
 
-    # Resolve county + state
-    state, county, key, size = resolve_location(query)
-    if not key:
-        return jsonify(
-            {
-                "ok": False,
-                "error": "No cleaned dataset found for that county/state.",
-            }
-        )
+    logger.info("[SEARCH] Incoming query='%s'", query)
 
-    # If dataset is too big for safe in-memory load, bail with a *clear* message
-    if size > MAX_IN_MEMORY_BYTES:
+    # 1) State
+    state_code = detect_state(query)
+    if not state_code:
         msg = (
-            f"Dataset {key} is too large to query directly in the web tool "
-            f"({size:,} bytes). "
-            "Try narrowing your query (add a ZIP code, an 'income over X' or "
-            "'value over X' filter) or use a smaller county. "
-            "For full-county exports, run an offline script against S3."
+            "Could not detect a state from your query. "
+            "Please include a full state name (e.g. 'Ohio') or a two-letter code (e.g. 'OH')."
         )
-        logger.warning("[SEARCH] %s", msg)
+        logger.info("[RESOLVE] %s Query='%s'", msg, query)
         return jsonify({"ok": False, "error": msg})
 
-    # Load full GeoJSON
+    # 2) County
+    county_slug, ds = detect_county(query, state_code)
+    if not ds:
+        msg = f"No cleaned dataset found for that county/state (state={state_code.upper()})."
+        logger.info("[RESOLVE] %s Query='%s'", msg, query)
+        return jsonify({"ok": False, "error": msg})
+
+    key = ds["key"]
+    size = ds["size"]
+
+    logger.info(
+        "[RESOLVE] Matched state=%s, county=%s, key=%s, size=%d",
+        state_code,
+        county_slug,
+        key,
+        size,
+    )
+
+    # 3) Size guard
+    if size > MAX_BYTES_WEB:
+        msg = (
+            f"Dataset {key} is too large to query directly in the web tool "
+            f"({size:,} bytes). Try narrowing your query (add a ZIP code, an "
+            "'income over X' or 'value over X' filter) or use a smaller county. "
+            "For full-county exports, run an offline script against S3."
+        )
+        logger.info("[SIZE] %s", msg)
+        return jsonify({"ok": False, "error": msg})
+
+    # 4) Load GeoJSON
     try:
-        gj = load_geojson_full(key, size)
+        gj = load_geojson_from_s3(key, size)
     except Exception as e:
-        logger.error(
-            "[ERROR] Failed to load dataset key=%s: %s", key, e, exc_info=True
+        logger.exception(
+            "[ERROR] Failed loading dataset key=%s: %s", key, str(e)
         )
         return (
             jsonify(
                 {
                     "ok": False,
-                    "error": f"Failed to load dataset {key}",
+                    "error": f"Failed loading dataset {key}",
                     "details": str(e),
                 }
             ),
@@ -568,7 +566,7 @@ def search():
 
     feats = gj.get("features", [])
 
-    # Filters
+    # 5) Filters
     zip_code = detect_zip(query)
     income_min, value_min = parse_filters(query)
 
@@ -577,27 +575,20 @@ def search():
     total = len(feats)
     feats = feats[:MAX_RESULTS]
 
-    logger.info(
-        "[SEARCH] state=%s county=%s key=%s size=%d total_matches=%d shown=%d",
-        state,
-        county,
-        key,
-        size,
-        total,
-        len(feats),
-    )
+    county_human = county_slug.replace("_", " ").title()
 
     return jsonify(
         {
             "ok": True,
             "query": query,
-            "state": state.upper(),
-            "county": normalize_county_slug(county).title(),
+            "state": state_code.upper(),
+            "county": county_human,
             "city": None,
             "zip": zip_code,
             "dataset_key": key,
             "total": total,
             "shown": len(feats),
+            "message": None,
             "results": [feature_to_obj(f) for f in feats],
         }
     )
@@ -607,7 +598,6 @@ def search():
 # EXPORT
 # ---------------------------------------------------------
 
-
 @app.route("/export", methods=["POST"])
 def export():
     if not session.get("authed"):
@@ -616,30 +606,51 @@ def export():
     data = request.get_json(silent=True) or {}
     query = (data.get("query") or "").strip()
 
-    logger.info("[EXPORT] Incoming query='%s'", query)
+    if not query:
+        return jsonify({"ok": False, "error": "Missing query."})
 
-    state, county, key, size = resolve_location(query)
-    if not key:
-        return jsonify({"ok": False, "error": "Dataset not found for that location."})
+    logger.info("[EXPORT] Incoming export query='%s'", query)
 
-    # Same size guard for export (we still need to read everything)
-    if size > MAX_IN_MEMORY_BYTES:
+    state_code = detect_state(query)
+    if not state_code:
         msg = (
-            f"Dataset {key} is too large for direct export via the web tool "
-            f"({size:,} bytes). For full-county exports, run an offline script "
-            "directly against S3 (using this key) or shard the county into smaller files."
+            "Could not detect a state from your query. "
+            "Please include a full state name (e.g. 'Ohio') or a two-letter code (e.g. 'OH')."
         )
-        logger.warning("[EXPORT] %s", msg)
+        logger.info("[EXPORT][RESOLVE] %s Query='%s'", msg, query)
+        return jsonify({"ok": False, "error": msg})
+
+    county_slug, ds = detect_county(query, state_code)
+    if not ds:
+        msg = f"No cleaned dataset found for that county/state (state={state_code.upper()})."
+        logger.info("[EXPORT][RESOLVE] %s Query='%s'", msg, query)
+        return jsonify({"ok": False, "error": msg})
+
+    key = ds["key"]
+    size = ds["size"]
+
+    logger.info(
+        "[EXPORT][RESOLVE] state=%s county=%s key=%s size=%d",
+        state_code,
+        county_slug,
+        key,
+        size,
+    )
+
+    if size > MAX_BYTES_WEB:
+        msg = (
+            f"Dataset {key} is too large to export directly from the web tool "
+            f"({size:,} bytes). Run an offline export script against S3 for this "
+            "county, or narrow your export (by ZIP, income, or value)."
+        )
+        logger.info("[EXPORT][SIZE] %s", msg)
         return jsonify({"ok": False, "error": msg})
 
     try:
-        gj = load_geojson_full(key, size)
+        gj = load_geojson_from_s3(key, size)
     except Exception as e:
-        logger.error(
-            "[ERROR] Failed to load dataset key=%s for export: %s",
-            key,
-            e,
-            exc_info=True,
+        logger.exception(
+            "[EXPORT][ERROR] Failed loading dataset key=%s: %s", key, str(e)
         )
         return (
             jsonify(
@@ -658,13 +669,12 @@ def export():
     income_min, value_min = parse_filters(query)
     feats = apply_filters(feats, income_min, value_min, zip_code)
 
-    filename = f"pelee_export_{county}_{state}.csv"
+    filename = f"pelee_export_{county_slug}_{state_code}.csv"
 
     def generate():
         buffer = io.StringIO()
         writer = csv.writer(buffer)
 
-        # Header
         writer.writerow(
             [
                 "address_number",
@@ -684,62 +694,30 @@ def export():
         buffer.truncate(0)
 
         for f in feats:
-            p = f.get("properties", {}) or {}
-            geom = f.get("geometry", {}) or {}
-            coords = geom.get("coordinates") or [None, None]
-
-            if isinstance(coords[0], (list, tuple)):
-                try:
-                    lon, lat = coords[0][0], coords[0][1]
-                except Exception:
-                    lon, lat = None, None
-            else:
-                try:
-                    lon, lat = coords[0], coords[1]
-                except Exception:
-                    lon, lat = None, None
-
-            num = p.get("number") or p.get("NUMBER") or p.get("house_number") or ""
-            street = p.get("street") or p.get("STREET") or p.get("road") or ""
-            unit = p.get("unit") or p.get("UNIT") or ""
-
-            city = p.get("city") or p.get("CITY") or ""
-            st = p.get("region") or p.get("REGION") or p.get("STUSPS") or ""
-            zipc = get_zip_from_props(p)
-
-            income = (
-                p.get("median_income")
-                or p.get("B19013_001E")
-                or p.get("DP03_0062E")
-                or p.get("income")
+            r = feature_to_obj(f)
+            writer.writerow(
+                [
+                    r["number"],
+                    r["street"],
+                    r["unit"],
+                    r["city"],
+                    r["state"],
+                    r["zip"],
+                    r["income"],
+                    r["value"],
+                    r["lat"],
+                    r["lon"],
+                ]
             )
-            value = (
-                p.get("median_value")
-                or p.get("B25077_001E")
-                or p.get("DP04_0089E")
-                or p.get("home_value")
-            )
-
-            writer.writerow([num, street, unit, city, st, zipc, income, value, lat, lon])
-
-            data_chunk = buffer.getvalue()
-            if data_chunk:
-                yield data_chunk
+            chunk = buffer.getvalue()
+            if chunk:
+                yield chunk
                 buffer.seek(0)
                 buffer.truncate(0)
 
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Disposition": f'attachment; filename="{filename}"'
     }
-
-    logger.info(
-        "[EXPORT] state=%s county=%s key=%s size=%d rows=%d",
-        state,
-        county,
-        key,
-        size,
-        len(feats),
-    )
 
     return Response(generate(), mimetype="text/csv", headers=headers)
 
@@ -749,4 +727,4 @@ def export():
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), debug=True)
