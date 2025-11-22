@@ -31,8 +31,12 @@ PASSWORD = os.getenv("PELEE_PASSWORD", "CaLuna")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 
+# Clean, ACS-enriched nationwide dataset
 CLEAN_PREFIX = "merged_with_tracts_acs_clean"
 MAX_RESULTS = 500  # on-screen
+
+# Toggle: if True, only return "residential" records (Option B)
+FILTER_RESIDENTIAL = True
 
 # ---------------------------------------------------------
 # FLASK + LOGGING
@@ -139,15 +143,24 @@ def scan_available_datasets():
 
             parts = key.split("/")
             if len(parts) != 3:
+                # Expect merged_with_tracts_acs_clean/<state>/<county>-clean.geojson
                 continue
 
             _, state_dir, filename = parts
             state_code = state_dir.lower()
-            county_name = filename.replace("-clean.geojson", "").lower()
+            county_name_raw = filename.replace("-clean.geojson", "").lower()
+
+            # Normalize some weird names: strip trailing "-county" if present
+            county_name = county_name_raw
+            if county_name.endswith("-county"):
+                county_name = county_name[:-len("-county")]
+            if county_name.endswith("_county"):
+                county_name = county_name[:-len("_county")]
 
             ALL_DATASETS[(state_code, county_name)] = {
                 "key": key,
                 "size": obj.get("Size", 0),
+                "raw_name": county_name_raw,
             }
             STATE_TO_COUNTIES.setdefault(state_code, set()).add(county_name)
             count += 1
@@ -253,7 +266,22 @@ CITY_TO_COUNTY = {
     ("tx", "corpus christi"): "nueces",
     ("oh", "cleveland"): "cuyahoga",
     ("oh", "columbus"): "franklin",
+    # a few extras for your usual queries
+    ("oh", "strongsville"): "cuyahoga",
+    ("oh", "berea"): "cuyahoga",
 }
+
+
+def _pick_first_state(county: str):
+    """
+    If state is unknown, but we matched a county name,
+    pick the first (state, county) combo from ALL_DATASETS.
+    This is a fallback, mostly for debugging.
+    """
+    for (s, c), meta in ALL_DATASETS.items():
+        if c == county:
+            return s
+    return None
 
 
 def detect_county(query: str, state_code: str | None):
@@ -272,19 +300,27 @@ def detect_county(query: str, state_code: str | None):
         candidates = list(STATE_TO_COUNTIES[state_code])
     else:
         # No state? consider all counties (we'll still try to choose best)
-        candidates = [c for (_, c) in ALL_DATASETS.keys()]
+        candidates = list({c for (_, c) in ALL_DATASETS.keys()})
 
     # 1) "X county" / "X parish" / "X borough"
     for county in candidates:
-        name = county.replace("_", " ")
+        name = county.replace("_", " ").replace("-", " ")
         if f"{name} county" in q_lower or f"{name} parish" in q_lower or f"{name} borough" in q_lower:
-            return state_code, county if state_code else _pick_first_state(county)
+            if state_code:
+                return state_code, county
+            guessed_state = _pick_first_state(county)
+            if guessed_state:
+                return guessed_state, county
 
     # 2) standalone county name
     for county in candidates:
-        name = county.replace("_", " ")
+        name = county.replace("_", " ").replace("-", " ")
         if re.search(r"\b" + re.escape(name) + r"\b", q_lower):
-            return state_code, county if state_code else _pick_first_state(county)
+            if state_code:
+                return state_code, county
+            guessed_state = _pick_first_state(county)
+            if guessed_state:
+                return guessed_state, county
 
     # 3) city synonyms (e.g., "houston" -> Harris County, TX)
     for (st, city), county in CITY_TO_COUNTY.items():
@@ -292,18 +328,6 @@ def detect_county(query: str, state_code: str | None):
             return st, county
 
     return None, None
-
-
-def _pick_first_state(county: str):
-    """
-    If state is unknown, but we matched a county name,
-    pick the first (state, county) combo from ALL_DATASETS.
-    This is a fallback, mostly for debugging.
-    """
-    for (s, c) in ALL_DATASETS.keys():
-        if c == county:
-            return county
-    return county
 
 
 def get_zip_from_props(p: dict):
@@ -369,11 +393,140 @@ def feature_to_obj(f):
         "lon": lon,
     }
 
+# ---------------------------------------------------------
+# RESIDENTIAL FILTER (Option B)
+# ---------------------------------------------------------
 
-def apply_filters(features, income_min, value_min, zip_code):
+RES_YES_TOKENS = {
+    "residential",
+    "res",
+    "single family",
+    "single-family",
+    "sfr",
+    "sfh",
+    "multi family",
+    "multi-family",
+    "multifamily",
+    "apartment",
+    "apartments",
+    "condo",
+    "condominium",
+    "townhome",
+    "townhouse",
+    "duplex",
+    "triplex",
+    "quadplex",
+    "mobile home",
+    "manufactured home",
+    "mh",
+    "dwelling",
+    "house",
+    "home",
+}
+
+RES_NO_TOKENS = {
+    "commercial",
+    "comm",
+    "industrial",
+    "ind",
+    "warehouse",
+    "office",
+    "retail",
+    "store",
+    "shop",
+    "shopping center",
+    "mall",
+    "restaurant",
+    "hotel",
+    "motel",
+    "hospital",
+    "school",
+    "university",
+    "college",
+    "gas station",
+    "service station",
+    "auto",
+    "parking",
+    "park-and-ride",
+    "church",
+    "religious",
+    "gov",
+    "government",
+    "utility",
+    "utilities",
+    "agricultural",
+    "agriculture",
+    "farm",
+    "ranch",
+    "vacant commercial",
+    "vacant industrial",
+}
+
+LANDUSE_KEY_HINTS = {
+    "landuse",
+    "land_use",
+    "land_use_desc",
+    "use",
+    "use_desc",
+    "use_type",
+    "lu",
+    "lu_code",
+    "lu_descr",
+    "zoning",
+    "zone",
+    "zone_desc",
+    "prop_class",
+    "prop_type",
+    "prop_use",
+    "bldg_type",
+    "building_type",
+    "bldg_use",
+    "bldgclass",
+}
+
+
+def is_residential(p: dict) -> bool:
+    """
+    Heuristic residential filter:
+      - If we find obvious COMMERCIAL / INDUSTRIAL tokens => False
+      - Else if we find obvious RESIDENTIAL tokens => True
+      - Else (no strong signal) => True (don't drop whole counties by accident)
+    """
+    texts = []
+
+    for k, v in p.items():
+        if v is None:
+            continue
+        k_lower = str(k).lower()
+        if k_lower in LANDUSE_KEY_HINTS or any(h in k_lower for h in LANDUSE_KEY_HINTS):
+            texts.append(str(v).lower())
+
+    if not texts:
+        # No landuse-ish context -> assume residential for now
+        return True
+
+    blob = " ".join(texts)
+
+    for token in RES_NO_TOKENS:
+        if token in blob:
+            return False
+
+    for token in RES_YES_TOKENS:
+        if token in blob:
+            return True
+
+    # No strong signals either way -> keep
+    return True
+
+
+def apply_filters(features, income_min, value_min, zip_code, filter_residential=True):
     out = []
     for f in features:
         p = f.get("properties", {}) or {}
+
+        # Residential filter first
+        if filter_residential and not is_residential(p):
+            continue
 
         if zip_code:
             feature_zip = str(get_zip_from_props(p))
@@ -468,6 +621,7 @@ def health():
         {
             "ok": True,
             "datasets": len(ALL_DATASETS),
+            "filter_residential": FILTER_RESIDENTIAL,
         }
     )
 
@@ -538,7 +692,13 @@ def search():
     zip_code = detect_zip(query)
     income_min, value_min = parse_filters(query)
 
-    feats = apply_filters(feats, income_min, value_min, zip_code)
+    feats = apply_filters(
+        feats,
+        income_min=income_min,
+        value_min=value_min,
+        zip_code=zip_code,
+        filter_residential=FILTER_RESIDENTIAL,
+    )
 
     total = len(feats)
     feats = feats[:MAX_RESULTS]
@@ -634,7 +794,14 @@ def export():
 
     zip_code = detect_zip(query)
     income_min, value_min = parse_filters(query)
-    feats = apply_filters(feats, income_min, value_min, zip_code)
+
+    feats = apply_filters(
+        feats,
+        income_min=income_min,
+        value_min=value_min,
+        zip_code=zip_code,
+        filter_residential=FILTER_RESIDENTIAL,
+    )
 
     filename = f"pelee_export_{county_key}_{state_code}.csv"
 
