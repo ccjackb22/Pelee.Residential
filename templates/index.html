@@ -1,488 +1,626 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>PELÉE AI | Address Search</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8" />
+  <title>Pelée AI – Internal Data Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <style>
-        :root {
-            --bg: #050816;
-            --card: #0b1220;
-            --accent: #38bdf8;
-            --accent-soft: rgba(56, 189, 248, 0.18);
-            --text-main: #e5e7eb;
-            --text-muted: #9ca3af;
-            --danger: #f97373;
-        }
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-        * {
-            box-sizing: border-box;
-        }
+  <style>
+    :root {
+      --bg: #020617;
+      --bg-soft: #020818;
+      --card: #020617;
+      --card-soft: #020818;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.1);
+      --accent-strong: #0ea5e9;
+      --border-soft: rgba(148, 163, 184, 0.25);
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --danger: #f97373;
+      --success: #4ade80;
+    }
 
-        body {
-            margin: 0;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-            background: radial-gradient(circle at top, #111827 0, #020617 55%, #000 100%);
-            color: var(--text-main);
-        }
+    * {
+      box-sizing: border-box;
+    }
 
-        header {
-            padding: 18px 32px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-            backdrop-filter: blur(16px);
-            background: linear-gradient(to right, rgba(15,23,42,0.9), rgba(15,23,42,0.7));
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent 55%),
+                  radial-gradient(circle at bottom, rgba(59, 130, 246, 0.08), transparent 55%),
+                  #020617;
+      color: var(--text-main);
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
 
-        .logo {
-            font-weight: 700;
-            font-size: 22px;
-            letter-spacing: 0.08em;
-        }
+    .page {
+      max-width: 1100px;
+      width: 100%;
+      padding: 32px 16px 48px;
+      margin: 0 auto;
+    }
 
-        .logo span {
-            color: var(--accent);
-        }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
 
-        .header-right a {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 13px;
-            opacity: 0.8;
-        }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
 
-        .header-right a:hover {
-            opacity: 1;
-            text-decoration: underline;
-        }
+    .brand-logo {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: radial-gradient(circle at 30% 20%, #facc15, #fb923c 40%, #0ea5e9 75%);
+      box-shadow: 0 0 40px rgba(56, 189, 248, 0.4);
+    }
 
-        .container {
-            max-width: 960px;
-            margin: 40px auto 60px;
-            padding: 0 16px;
-        }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+    }
 
-        .hero {
-            text-align: left;
-            margin-bottom: 24px;
-        }
+    .brand-title {
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      font-size: 14px;
+      text-transform: uppercase;
+      color: #e5e7eb;
+    }
 
-        .hero-title {
-            font-size: 32px;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-        }
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
 
-        .hero-subtitle {
-            font-size: 16px;
-            color: var(--text-muted);
-        }
+    .user-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
 
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(15,23,42,0.9);
-            border: 1px solid rgba(148,163,184,0.45);
-            margin-bottom: 10px;
-            color: var(--text-muted);
-        }
+    .badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: rgba(15, 23, 42, 0.7);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-        .pill-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 999px;
-            background: #22c55e;
-        }
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--success);
+      box-shadow: 0 0 10px rgba(74, 222, 128, 0.7);
+    }
 
-        .search-card {
-            background: radial-gradient(circle at top left, rgba(56,189,248,0.12), transparent 60%),
-                        linear-gradient(to bottom right, rgba(15,23,42,0.96), rgba(15,23,42,0.98));
-            border-radius: 18px;
-            padding: 20px 20px 18px;
-            border: 1px solid rgba(148,163,184,0.3);
-            box-shadow: 0 18px 60px rgba(15,23,42,0.8);
-        }
+    .logout-link {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: transparent;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 12px;
+      transition: all 0.18s ease-out;
+    }
 
-        .search-form {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
+    .logout-link:hover {
+      background: rgba(15, 23, 42, 0.9);
+      color: #e5e7eb;
+      border-color: rgba(148, 163, 184, 0.8);
+    }
 
-        .search-input {
-            flex: 1 1 220px;
-            background: rgba(15,23,42,0.9);
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.7);
-            padding: 10px 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 2.2fr);
+      gap: 16px;
+    }
 
-        .search-input input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            outline: none;
-            color: var(--text-main);
-            font-size: 15px;
-        }
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
 
-        .search-input input::placeholder {
-            color: rgba(148,163,184,0.9);
-        }
+    .card {
+      border-radius: 24px;
+      border: 1px solid var(--border-soft);
+      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 60%),
+                  rgba(15, 23, 42, 0.92);
+      padding: 20px 20px 18px;
+      box-shadow:
+        0 20px 45px rgba(15, 23, 42, 0.8),
+        0 0 0 1px rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(20px);
+    }
 
-        .search-button {
-            border-radius: 999px;
-            border: none;
-            padding: 10px 18px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            background: linear-gradient(to right, #0ea5e9, #22c55e);
-            color: #0b1120;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-        }
+    .card-right {
+      background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.10), transparent 60%),
+                  rgba(15, 23, 42, 0.95);
+    }
 
-        .search-button:hover {
-            filter: brightness(1.05);
-        }
+    .card-header {
+      margin-bottom: 10px;
+    }
 
-        .examples {
-            margin-top: 10px;
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
 
-        .examples span {
-            color: var(--text-main);
-        }
+    .card-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
 
-        .results-wrap {
-            margin-top: 28px;
-        }
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
 
-        .summary {
-            padding: 12px 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(148,163,184,0.4);
-            background: radial-gradient(circle at top left, var(--accent-soft), rgba(15,23,42,0.96));
-            font-size: 13px;
-            line-height: 1.6;
-        }
+    .pill {
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: rgba(15, 23, 42, 0.85);
+    }
 
-        .summary strong {
-            color: var(--accent);
-        }
+    .pill-strong {
+      border-color: rgba(56, 189, 248, 0.5);
+      background: rgba(8, 47, 73, 0.95);
+      color: #e5e7eb;
+    }
 
-        .error-box {
-            padding: 12px 14px;
-            border-radius: 10px;
-            border: 1px solid rgba(248,113,113,0.7);
-            background: rgba(127,29,29,0.65);
-            color: #fecaca;
-            font-size: 13px;
-            margin-top: 12px;
-        }
+    .query-form {
+      margin-top: 6px;
+    }
 
-        .export-row {
-            margin-top: 10px;
-            display: flex;
-            justify-content: flex-end;
-        }
+    .query-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
 
-        .export-btn {
-            border-radius: 999px;
-            border: 1px solid rgba(56,189,248,0.6);
-            padding: 7px 12px;
-            font-size: 12px;
-            background: rgba(15,23,42,0.9);
-            color: var(--accent);
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
 
-        .export-btn:hover {
-            background: rgba(15,23,42,1);
-        }
+    .query-input {
+      flex: 1;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.98));
+      padding: 10px 14px;
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
+    }
 
-        .results-list {
-            margin-top: 18px;
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-        }
+    .query-input::placeholder {
+      color: var(--text-muted);
+    }
 
-        @media (min-width: 800px) {
-            .results-list {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
+    .query-input:focus {
+      border-color: var(--accent);
+      box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.98),
+        0 0 0 1px rgba(56, 189, 248, 0.6),
+        0 0 18px rgba(56, 189, 248, 0.45);
+    }
 
-        .result-card {
-            background: linear-gradient(to bottom right, #020617, #020617);
-            border-radius: 12px;
-            padding: 12px 12px 11px;
-            border: 1px solid rgba(148,163,184,0.3);
-            box-shadow: 0 10px 30px rgba(15,23,42,0.8);
-            font-size: 13px;
-            line-height: 1.5;
-        }
+    .btn-primary {
+      border-radius: 999px;
+      border: none;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      background: radial-gradient(circle at top left, var(--accent-strong), #0369a1);
+      color: #0b1120;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      box-shadow:
+        0 12px 25px rgba(56, 189, 248, 0.4),
+        0 0 0 1px rgba(8, 47, 73, 0.9);
+      transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
+    }
 
-        .result-address {
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow:
+        0 18px 40px rgba(56, 189, 248, 0.55),
+        0 0 0 1px rgba(8, 47, 73, 1);
+    }
 
-        .result-meta {
-            color: var(--text-muted);
-        }
+    .btn-primary:active {
+      transform: translateY(0px) scale(0.98);
+      box-shadow:
+        0 10px 20px rgba(56, 189, 248, 0.4),
+        0 0 0 1px rgba(8, 47, 73, 1);
+    }
 
-        .pill-badge {
-            display: inline-block;
-            font-size: 11px;
-            padding: 2px 7px;
-            border-radius: 999px;
-            background: rgba(15,23,42,0.9);
-            border: 1px solid rgba(148,163,184,0.7);
-            margin-right: 6px;
-            margin-top: 4px;
-        }
+    .btn-primary span.icon {
+      font-size: 15px;
+    }
 
-        .loading {
-            opacity: 0.85;
-        }
-    </style>
+    .hint {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .examples-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .example-pill {
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px dashed rgba(148, 163, 184, 0.4);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--success);
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.85);
+      margin-right: 6px;
+    }
+
+    .status-strong {
+      color: #e5e7eb;
+      font-weight: 500;
+    }
+
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .results-title {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .results-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .results-meta span {
+      display: block;
+    }
+
+    .results-meta strong {
+      color: #e5e7eb;
+    }
+
+    .results-summary {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .results-error {
+      font-size: 12px;
+      color: var(--danger);
+      margin-bottom: 10px;
+    }
+
+    .results-table-wrap {
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(15, 23, 42, 0.99));
+      max-height: 360px;
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    th, td {
+      padding: 8px 10px;
+      text-align: left;
+      border-bottom: 1px solid rgba(31, 41, 55, 0.9);
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: rgba(15, 23, 42, 0.98);
+      font-weight: 500;
+      color: var(--text-muted);
+      z-index: 1;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:nth-child(even) td {
+      background: rgba(15, 23, 42, 0.98);
+    }
+
+    tr:nth-child(odd) td {
+      background: rgba(15, 23, 42, 0.93);
+    }
+
+    .pill-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      font-size: 10px;
+      color: var(--text-muted);
+      gap: 5px;
+    }
+
+    .pill-tag-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.9);
+    }
+
+    .value-high {
+      color: #fbbf24;
+      font-weight: 500;
+    }
+
+    .value-low {
+      color: #9ca3af;
+    }
+
+    .footer-note {
+      margin-top: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+  </style>
 </head>
 <body>
-
-<header>
-    <div class="logo"><span>PELÉE</span> AI</div>
-    <div class="header-right">
-        <a href="/logout">Logout</a>
-    </div>
-</header>
-
-<div class="container">
-    <div class="hero">
-        <div class="pill">
-            <span class="pill-dot"></span>
-            Internal Data Tool · Residential + Commercial
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brand-logo"></div>
+        <div class="brand-text">
+          <div class="brand-title">PELÉE AI</div>
+          <div class="brand-subtitle">Internal Data Tool · Residential + Commercial</div>
         </div>
-        <div class="hero-title">AI-powered address discovery</div>
-        <div class="hero-subtitle">
+      </div>
+      <div class="user-controls">
+        <div class="badge">
+          <span class="badge-dot"></span>
+          <span>Connected to S3 · <strong>US coverage</strong></span>
+        </div>
+        <a class="logout-link" href="/logout">Logout</a>
+      </div>
+    </header>
+
+    <div class="layout">
+      <!-- LEFT: Query / Input -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">AI-powered address discovery</div>
+          <div class="card-subtitle">
             Pull targeted addresses by county, city, ZIP, income bands, and home values in one natural-language query.
+          </div>
         </div>
-    </div>
 
-    <div class="search-card">
-        <form id="searchForm" class="search-form">
-            <div class="search-input">
-                <span>🔍</span>
-                <input
-                    id="query"
-                    type="text"
-                    placeholder="e.g. homes in Strongsville Ohio with incomes over 150k"
-                    autocomplete="off"
-                />
-            </div>
-            <button class="search-button" type="submit">
-                <span>Search</span> ⏎
+        <div class="pill-row">
+          <div class="pill pill-strong">US addresses on S3</div>
+          <div class="pill">County · City · ZIP</div>
+          <div class="pill">Home value &amp; income bands</div>
+          <div class="pill">Residential filter</div>
+          <div class="pill">Instant CSV export (coming soon)</div>
+        </div>
+
+        <form class="query-form" method="POST" action="/search">
+          <div class="query-label">Search</div>
+          <div class="input-row">
+            <input
+              type="text"
+              name="query"
+              id="query"
+              class="query-input"
+              autocomplete="off"
+              placeholder="e.g. homes in Wakulla County Florida over 200k income"
+              value="{{ query or '' }}"
+            />
+            <button class="btn-primary" type="submit">
+              <span class="icon">🔍</span>
+              <span>Search</span>
             </button>
+          </div>
+
+          <div class="hint">
+            Examples:
+            <div class="examples-list">
+              <span class="example-pill">“addresses in Wakulla County Florida”</span>
+              <span class="example-pill">“homes in Teton County WY with incomes over 200k”</span>
+              <span class="example-pill">“ZIP 44116 residential addresses”</span>
+            </div>
+          </div>
         </form>
 
-        <div class="examples">
-            Examples:
-            <span>“addresses in Wakulla County Florida”</span> ·
-            <span>“homes in Teton County WY with incomes over 200k”</span> ·
-            <span>“ZIP 44116 residential addresses”</span>
+        <div class="status-row">
+          <div>
+            <span class="status-dot"></span>
+            <span class="status-strong">Dataset index ready</span>
+          </div>
+          <div>1767 cleaned county datasets · 98 GB on S3 (approx)</div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Results -->
+      <section class="card card-right">
+        <div class="results-header">
+          <div class="results-title">
+            {% if query %}
+              Results
+            {% else %}
+              Ready when you are
+            {% endif %}
+          </div>
+          <div class="results-meta">
+            {% if query %}
+              <span><strong>Query:</strong> {{ query }}</span>
+            {% else %}
+              <span>Run a search on the left.</span>
+            {% endif %}
+          </div>
         </div>
 
-        <div id="results-container" class="results-wrap"></div>
+        {% if error %}
+          <div class="results-error">
+            {{ error }}
+          </div>
+        {% endif %}
+
+        {% if query %}
+          <div class="results-summary">
+            {% if location %}
+              <div><strong>Location:</strong> {{ location }}</div>
+            {% endif %}
+            {% if dataset_key %}
+              <div><strong>Dataset:</strong> {{ dataset_key }}</div>
+            {% endif %}
+            {% if total is not none %}
+              <div>
+                <strong>Results:</strong>
+                Showing {{ shown or 0 }} of {{ total }}
+              </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="results-summary">
+            Describe the addresses you want, including county + state (or ZIP), and any income / value filters,
+            and Pelée will resolve it to an S3 dataset and return matching rows.
+          </div>
+        {% endif %}
+
+        {% if results %}
+          <div class="results-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Address</th>
+                  <th>City</th>
+                  <th>State</th>
+                  <th>ZIP</th>
+                  <th>Est. Income</th>
+                  <th>Est. Value</th>
+                  <th>Tags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in results %}
+                  <tr>
+                    <td>{{ row.address or row.Address or row.full_address or '' }}</td>
+                    <td>{{ row.city or row.City or '' }}</td>
+                    <td>{{ row.state or row.State or '' }}</td>
+                    <td>{{ row.zip or row.Zip or row.postal_code or '' }}</td>
+                    <td class="{{ (row.income or row.estimated_income or 0) | int >= 200000 and 'value-high' or 'value-low' }}">
+                      {% if row.income or row.estimated_income %}
+                        ${{ (row.income or row.estimated_income) | int | string | replace(',', ' ') }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if row.value or row.estimated_value %}
+                        ${{ (row.value or row.estimated_value) | int | string | replace(',', ' ') }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td>
+                      <span class="pill-tag">
+                        <span class="pill-tag-dot"></span>
+                        {% if row.landuse or row.land_use %}
+                          {{ row.landuse or row.land_use }}
+                        {% else %}
+                          Residential
+                        {% endif %}
+                      </span>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% elif query %}
+          <div class="results-summary">
+            No matching addresses found. Try:
+            <ul>
+              <li>Lowering the income / value threshold</li>
+              <li>Checking the county + state in the query</li>
+              <li>Removing very specific street-level filters</li>
+            </ul>
+          </div>
+        {% endif %}
+
+        <div class="footer-note">
+          CSV export and advanced filters (multi-county, polygon, etc.) will live here later. For now, use
+          simple county / ZIP + income / value queries to validate the cleaned datasets.
+        </div>
+      </section>
     </div>
-</div>
-
-<script>
-const form = document.getElementById("searchForm");
-const queryInput = document.getElementById("query");
-const resultsDiv = document.getElementById("results-container");
-
-form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-
-    const q = (queryInput.value || "").trim();
-    if (!q) {
-        resultsDiv.innerHTML = "<div class='error-box'>Please enter a query.</div>";
-        return;
-    }
-
-    resultsDiv.innerHTML = `
-        <div class="summary loading">
-            Searching…<br>
-            <span style="color: var(--text-muted); font-size: 12px;">(${q})</span>
-        </div>
-    `;
-
-    try {
-        const resp = await fetch("/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q })
-        });
-
-        if (!resp.ok) {
-            const text = await resp.text();
-            resultsDiv.innerHTML = `
-                <div class="error-box">
-                    Server error (${resp.status}).<br>
-                    <div style="opacity:0.8; margin-top:4px; font-size:11px;">${text || "No details provided."}</div>
-                </div>
-            `;
-            return;
-        }
-
-        const data = await resp.json();
-
-        if (!data.ok) {
-            resultsDiv.innerHTML = `<div class="error-box">${data.error || "Search failed."}</div>`;
-            return;
-        }
-
-        renderResults(q, data);
-    } catch (err) {
-        resultsDiv.innerHTML = `
-            <div class="error-box">
-                Network or server error. Try again.<br>
-                <div style="opacity:0.8; margin-top:4px; font-size:11px;">${err}</div>
-            </div>
-        `;
-    }
-});
-
-function renderResults(query, data) {
-    const hasResults = (data.results || []).length > 0;
-
-    const messageLine = data.message
-        ? `<br><span style="color: var(--text-muted); font-size: 12px;">${data.message}</span>`
-        : "";
-
-    const locationLine = (() => {
-        const parts = [];
-        if (data.city) parts.push(data.city);
-        if (data.county) parts.push(`${data.county} County`);
-        if (data.state) parts.push(data.state);
-        return parts.join(", ") || "—";
-    })();
-
-    const summaryHtml = `
-        <div class="summary">
-            <strong>Query</strong>: ${data.query}<br>
-            <strong>Location</strong>: ${locationLine}<br>
-            <strong>Dataset</strong>: <span style="color:#cbd5f5">${data.dataset_key || "n/a"}</span><br>
-            <strong>Results</strong>: Showing ${data.shown || 0} of ${data.total || 0}
-            ${messageLine}
-        </div>
-    `;
-
-    let exportHtml = "";
-    if (hasResults) {
-        exportHtml = `
-            <div class="export-row">
-                <button class="export-btn" onclick="exportResults('${encodeURIComponent(query)}')">
-                    ⬇️ Export full CSV
-                </button>
-            </div>
-        `;
-    }
-
-    let cards = "";
-    if (hasResults) {
-        cards = data.results.map((r) => {
-            const addr = r.address || "";
-            const city = r.city || "";
-            const st = r.state || "";
-            const zip = r.zip || "";
-            const income = r.income ?? "N/A";
-            const value = r.value ?? "N/A";
-            const lat = (r.lat !== null && r.lat !== undefined) ? r.lat : "—";
-            const lon = (r.lon !== null && r.lon !== undefined) ? r.lon : "—";
-
-            return `
-                <div class="result-card">
-                    <div class="result-address">${addr}</div>
-                    <div class="result-meta">
-                        ${city ? city + ", " : ""}${st}${zip ? " " + zip : ""}
-                    </div>
-                    <div class="result-meta">
-                        <span class="pill-badge">Income: ${income}</span>
-                        <span class="pill-badge">Value: ${value}</span>
-                    </div>
-                    <div class="result-meta" style="margin-top:4px;">
-                        Lat: ${lat} · Lon: ${lon}
-                    </div>
-                </div>
-            `;
-        }).join("");
-    } else {
-        cards = `
-            <div class="error-box" style="margin-top:12px;">
-                No matching addresses found for that filter.<br>
-                Try lowering the income/value threshold or adjusting the city / county / ZIP.
-            </div>
-        `;
-    }
-
-    resultsDiv.innerHTML = summaryHtml + exportHtml + `<div class="results-list">${cards}</div>`;
-}
-
-async function exportResults(qEncoded) {
-    const q = decodeURIComponent(qEncoded);
-    try {
-        const resp = await fetch("/export", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q })
-        });
-
-        if (!resp.ok) {
-            alert("Export failed (" + resp.status + ").");
-            return;
-        }
-
-        const blob = await resp.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "pelee_export.csv";   /* ← FIXED HERE */
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-    } catch (err) {
-        alert("Export failed: " + err);
-    }
-}
-</script>
-
+  </div>
 </body>
 </html>
