@@ -431,6 +431,42 @@
       font-size: 11px;
       color: var(--text-muted);
     }
+
+    .download-form {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-secondary {
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 400;
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.12s ease-out;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+    }
+
+    .btn-secondary.btn-disabled,
+    .btn-secondary:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      border-style: dashed;
+      box-shadow: none;
+    }
   </style>
 </head>
 <body>
@@ -456,18 +492,19 @@
       <!-- LEFT: Query / Input -->
       <section class="card">
         <div class="card-header">
-          <div class="card-title">County Dataset Lookup</div>
+          <div class="card-title">AI-powered address discovery</div>
           <div class="card-subtitle">
-            Search a county + state to load and preview address records. Export coming soon.
+            Resolve any cleaned county dataset by typing the county + state. Pelée will return a small preview
+            and let you download the full county file as CSV for analysis in Excel or your own tools.
           </div>
         </div>
 
         <div class="pill-row">
           <div class="pill pill-strong">US addresses on S3</div>
-          <div class="pill">County-level resolution</div>
-          <div class="pill">Full cleaned datasets</div>
-          <div class="pill">Preview up to 500 rows</div>
-          <div class="pill">CSV export (coming soon)</div>
+          <div class="pill">County-level exports</div>
+          <div class="pill">Residential / basic filters</div>
+          <div class="pill">CSV download</div>
+          <div class="pill">Instant CSV export (UI only, for now)</div>
         </div>
 
         <form class="query-form" method="POST" action="/search">
@@ -479,7 +516,7 @@
               id="query"
               class="query-input"
               autocomplete="off"
-              placeholder="e.g. addresses in Cuyahoga County Ohio"
+              placeholder="e.g. residential addresses in Wakulla County Florida"
               value="{{ query or '' }}"
             />
             <button class="btn-primary" type="submit">
@@ -489,11 +526,12 @@
           </div>
 
           <div class="hint">
-            Search by county + state:
+            Include the exact county name, the word <strong>“County”</strong>, and the full state name.
+            Examples:
             <div class="examples-list">
-              <span class="example-pill">“addresses in Cuyahoga County Ohio”</span>
-              <span class="example-pill">“addresses in Teton County Wyoming”</span>
-              <span class="example-pill">“addresses in Orange County Florida”</span>
+              <span class="example-pill">“residential addresses in Wakulla County Florida”</span>
+              <span class="example-pill">“all addresses in Walton County Florida”</span>
+              <span class="example-pill">“addresses in Washington County Florida”</span>
             </div>
           </div>
         </form>
@@ -512,7 +550,7 @@
         <div class="results-header">
           <div class="results-title">
             {% if query %}
-              Results
+              Results preview
             {% else %}
               Ready when you are
             {% endif %}
@@ -521,7 +559,7 @@
             {% if query %}
               <span><strong>Query:</strong> {{ query }}</span>
             {% else %}
-              <span>Start by entering a county and state.</span>
+              <span>Run a county + state search on the left.</span>
             {% endif %}
           </div>
         </div>
@@ -540,17 +578,22 @@
             {% if dataset_key %}
               <div><strong>Dataset:</strong> {{ dataset_key }}</div>
             {% endif %}
-            {% if total_results is not none %}
+            {% if total is not none %}
               <div>
-                <strong>Results:</strong>
-                Showing {{ shown_results or 0 }} of {{ total_results }}
+                <strong>Preview:</strong>
+                Showing {{ shown or 0 }} rows from this county-level dataset.
+                Download CSV to work with all matching rows.
               </div>
             {% endif %}
           </div>
         {% else %}
           <div class="results-summary">
-            Enter a county and state to load its cleaned dataset.  
-            Preview up to 500 rows directly in the tool.
+            Type a description including county + state (and optional income/value hints) and Pelée will:
+            <ul>
+              <li>Resolve it to a cleaned S3 county dataset</li>
+              <li>Show a small preview of matching rows</li>
+              <li>Let you export the full dataset as CSV for deeper analysis</li>
+            </ul>
           </div>
         {% endif %}
 
@@ -575,16 +618,16 @@
                     <td>{{ row.city or row.City or '' }}</td>
                     <td>{{ row.state or row.State or '' }}</td>
                     <td>{{ row.zip or row.Zip or row.postal_code or '' }}</td>
-                    <td class="{{ (row.income or 0) | int >= 200000 and 'value-high' or 'value-low' }}">
-                      {% if row.income %}
-                        ${{ row.income | int }}
+                    <td class="{{ (row.income or row.estimated_income or 0) | int >= 200000 and 'value-high' or 'value-low' }}">
+                      {% if row.income or row.estimated_income %}
+                        ${{ (row.income or row.estimated_income) | int }}
                       {% else %}
                         —
                       {% endif %}
                     </td>
                     <td>
-                      {% if row.home_value %}
-                        ${{ row.home_value | int }}
+                      {% if row.home_value or row.value or row.estimated_value %}
+                        ${{ (row.home_value or row.value or row.estimated_value) | int }}
                       {% else %}
                         —
                       {% endif %}
@@ -592,7 +635,11 @@
                     <td>
                       <span class="pill-tag">
                         <span class="pill-tag-dot"></span>
-                        Residential
+                        {% if row.landuse or row.land_use %}
+                          {{ row.landuse or row.land_use }}
+                        {% else %}
+                          Residential
+                        {% endif %}
                       </span>
                     </td>
                   </tr>
@@ -600,17 +647,56 @@
               </tbody>
             </table>
           </div>
+
+          {% if download_available %}
+            <form method="POST" action="/download" class="download-form">
+              <input type="hidden" name="query" value="{{ query }}">
+              <button type="submit" class="btn-secondary" id="download-btn">
+                ⬇️ Download full CSV
+              </button>
+              <button type="button" class="btn-secondary btn-disabled" id="explore-btn" disabled>
+                🔍 Explore full results (after download)
+              </button>
+            </form>
+          {% endif %}
         {% elif query %}
           <div class="results-summary">
-            No results found. Check the county name and state.
+            No matching addresses found. Try:
+            <ul>
+              <li>Removing income / value phrases from the query</li>
+              <li>Checking the county spelling and including the word “County”</li>
+              <li>Using a different county + state combination</li>
+            </ul>
           </div>
         {% endif %}
 
         <div class="footer-note">
-          CSV export for full-county downloads will appear here soon.
+          CSV export returns all matching rows with both friendly fields and the full raw properties from S3.
+          Use Excel, Python, or BI tools for deeper exploration. On-screen explore mode will be expanded later.
         </div>
       </section>
     </div>
   </div>
+
+  <script>
+    (function () {
+      const downloadBtn = document.getElementById('download-btn');
+      const exploreBtn = document.getElementById('explore-btn');
+
+      if (!downloadBtn || !exploreBtn) return;
+
+      // Enable explore only after user clicks download
+      downloadBtn.addEventListener('click', function () {
+        exploreBtn.disabled = false;
+        exploreBtn.classList.remove('btn-disabled');
+      });
+
+      exploreBtn.addEventListener('click', function () {
+        if (exploreBtn.disabled) return;
+        // Placeholder behavior for now – can wire to a richer explorer later
+        alert('Explore mode will open richer in-browser tools later. For now, use the CSV in Excel or your own stack.');
+      });
+    })();
+  </script>
 </body>
 </html>
