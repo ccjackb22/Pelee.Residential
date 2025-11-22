@@ -2,25 +2,22 @@ import os
 import json
 import logging
 import time
+import csv
+import io
 import re
 from datetime import datetime
 
 import boto3
 from botocore.config import Config
 from flask import (
-    Flask,
-    render_template,
-    request,
-    redirect,
-    url_for,
-    session,
-    jsonify,
+    Flask, render_template, request, redirect,
+    url_for, session, jsonify, send_file
 )
 from dotenv import load_dotenv
 
-# -------------------------------------------------------------------
-# ENV + LOGGING SETUP
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
+# ENV + LOGGING
+# ------------------------------------------------------------
 
 load_dotenv()
 
@@ -53,720 +50,242 @@ boto_session = boto3.session.Session(
 )
 s3 = boto_session.client("s3", config=Config(max_pool_connections=10))
 
-# (state, normalized_county) -> {key, size, raw_name}
-COUNTY_INDEX: dict[str, dict[str, dict]] = {}
+# (state, county_norm) -> key,size
+COUNTY_INDEX = {}
 
-# -------------------------------------------------------------------
-# STATE + COUNTY NORMALIZATION
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
+# STATE / COUNTY NORMALIZATION
+# ------------------------------------------------------------
 
 STATE_ALIASES = {
-    # 2-letter to 2-letter
-    "al": "al", "ak": "ak", "az": "az", "ar": "ar", "ca": "ca",
-    "co": "co", "ct": "ct", "de": "de", "fl": "fl", "ga": "ga",
-    "hi": "hi", "id": "id", "il": "il", "in": "in", "ia": "ia",
-    "ks": "ks", "ky": "ky", "la": "la", "me": "me", "md": "md",
-    "ma": "ma", "mi": "mi", "mn": "mn", "ms": "ms", "mo": "mo",
-    "mt": "mt", "ne": "ne", "nv": "nv", "nh": "nh", "nj": "nj",
-    "nm": "nm", "ny": "ny", "nc": "nc", "nd": "nd", "oh": "oh",
-    "ok": "ok", "or": "or", "pa": "pa", "ri": "ri", "sc": "sc",
-    "sd": "sd", "tn": "tn", "tx": "tx", "ut": "ut", "vt": "vt",
-    "va": "va", "wa": "wa", "wv": "wv", "wi": "wi", "wy": "wy",
-    "dc": "dc", "pr": "pr",
-
+    # abbreviations
+    "al":"al","ak":"ak","az":"az","ar":"ar","ca":"ca","co":"co","ct":"ct","de":"de",
+    "fl":"fl","ga":"ga","hi":"hi","id":"id","il":"il","in":"in","ia":"ia","ks":"ks",
+    "ky":"ky","la":"la","me":"me","md":"md","ma":"ma","mi":"mi","mn":"mn","ms":"ms",
+    "mo":"mo","mt":"mt","ne":"ne","nv":"nv","nh":"nh","nj":"nj","nm":"nm","ny":"ny",
+    "nc":"nc","nd":"nd","oh":"oh","ok":"ok","or":"or","pa":"pa","ri":"ri","sc":"sc",
+    "sd":"sd","tn":"tn","tx":"tx","ut":"ut","vt":"vt","va":"va","wa":"wa","wv":"wv",
+    "wi":"wi","wy":"wy","dc":"dc","pr":"pr",
     # full names
-    "alabama": "al",
-    "alaska": "ak",
-    "arizona": "az",
-    "arkansas": "ar",
-    "california": "ca",
-    "colorado": "co",
-    "connecticut": "ct",
-    "delaware": "de",
-    "florida": "fl",
-    "georgia": "ga",
-    "hawaii": "hi",
-    "idaho": "id",
-    "illinois": "il",
-    "indiana": "in",
-    "iowa": "ia",
-    "kansas": "ks",
-    "kentucky": "ky",
-    "louisiana": "la",
-    "maine": "me",
-    "maryland": "md",
-    "massachusetts": "ma",
-    "michigan": "mi",
-    "minnesota": "mn",
-    "mississippi": "ms",
-    "missouri": "mo",
-    "montana": "mt",
-    "nebraska": "ne",
-    "nevada": "nv",
-    "new hampshire": "nh",
-    "new jersey": "nj",
-    "new mexico": "nm",
-    "new york": "ny",
-    "north carolina": "nc",
-    "north dakota": "nd",
-    "ohio": "oh",
-    "oklahoma": "ok",
-    "oregon": "or",
-    "pennsylvania": "pa",
-    "rhode island": "ri",
-    "south carolina": "sc",
-    "south dakota": "sd",
-    "tennessee": "tn",
-    "texas": "tx",
-    "utah": "ut",
-    "vermont": "vt",
-    "virginia": "va",
-    "washington": "wa",
-    "west virginia": "wv",
-    "wisconsin": "wi",
-    "wyoming": "wy",
-    "district of columbia": "dc",
-    "puerto rico": "pr",
+    "alabama":"al","alaska":"ak","arizona":"az","arkansas":"ar","california":"ca",
+    "colorado":"co","connecticut":"ct","delaware":"de","florida":"fl","georgia":"ga",
+    "hawaii":"hi","idaho":"id","illinois":"il","indiana":"in","iowa":"ia",
+    "kansas":"ks","kentucky":"ky","louisiana":"la","maine":"me","maryland":"md",
+    "massachusetts":"ma","michigan":"mi","minnesota":"mn","mississippi":"ms",
+    "missouri":"mo","montana":"mt","nebraska":"ne","nevada":"nv",
+    "new hampshire":"nh","new jersey":"nj","new mexico":"nm","new york":"ny",
+    "north carolina":"nc","north dakota":"nd","ohio":"oh","oklahoma":"ok",
+    "oregon":"or","pennsylvania":"pa","rhode island":"ri","south carolina":"sc",
+    "south dakota":"sd","tennessee":"tn","texas":"tx","utah":"ut","vermont":"vt",
+    "virginia":"va","washington":"wa","west virginia":"wv","wisconsin":"wi",
+    "wyoming":"wy","district of columbia":"dc","puerto rico":"pr",
 }
 
-
-def normalize_state_name(text: str | None) -> str | None:
-    if not text:
-        return None
-    t = text.strip().lower()
-    if t in STATE_ALIASES:
-        return STATE_ALIASES[t]
-    # handle things like "ohio," with punctuation
-    t = t.strip(",. ")
+def normalize_state(text):
+    if not text: return None
+    t = text.strip().lower().rstrip(",.")
     return STATE_ALIASES.get(t)
 
+def normalize_county(text):
+    if not text: return None
+    t = text.lower().strip()
+    t = t.replace("_"," ")
+    t = re.sub(r"[-]+"," ",t)
 
-def normalize_county_name(name: str | None) -> str | None:
-    if not name:
-        return None
-    n = name.strip().lower()
-    n = n.replace("_", " ")
-    # keep hyphens that are actually part of names, but also allow spaces
-    n = re.sub(r"[-]+", " ", n)
+    remove = [" county"," parish"," borough"," census area"," municipality"," city"]
+    for r in remove:
+        if t.endswith(r):
+            t = t[:-len(r)]
+    return t.strip()
 
-    # remove common suffixes
-    suffixes = [
-        " county",
-        " parish",
-        " borough",
-        " census area",
-        " municipality",
-        " city",
-    ]
-    for suf in suffixes:
-        if n.endswith(suf):
-            n = n[: -len(suf)]
-            break
+# ------------------------------------------------------------
+# BUILD COUNTY INDEX
+# ------------------------------------------------------------
 
-    return n.strip()
-
-
-# -------------------------------------------------------------------
-# BOOT: BUILD COUNTY INDEX FROM S3
-# -------------------------------------------------------------------
-
-def build_county_index():
-    """Scan S3 once on boot and map (state, county) -> key,size."""
+def build_index():
     global COUNTY_INDEX
-    logging.info(
-        "[BOOT] Scanning S3 bucket=%s prefix=%s for *-clean.geojson ...",
-        S3_BUCKET,
-        S3_PREFIX,
-    )
-    total = 0
+    logging.info("[BOOT] Building index…")
     paginator = s3.get_paginator("list_objects_v2")
 
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX):
-        for obj in page.get("Contents", []):
+        for obj in page.get("Contents",[]):
             key = obj["Key"]
             if not key.endswith("-clean.geojson"):
                 continue
 
-            size = obj["Size"]
-            rel = key[len(S3_PREFIX) :]  # e.g. "tx/cameron-clean.geojson"
+            rel = key[len(S3_PREFIX):]     # e.g. fl/wakulla-clean.geojson
             parts = rel.split("/")
             if len(parts) != 2:
                 continue
 
-            state = parts[0].lower().strip()
+            state = parts[0].lower()
             filename = parts[1]
+            base = filename[:-len("-clean.geojson")]
 
-            base = filename[: -len("-clean.geojson")]  # "cameron" or "hidalgo_county"
-            norm = normalize_county_name(base)
-            if not norm:
+            county_norm = normalize_county(base)
+            if not county_norm:
                 continue
 
-            COUNTY_INDEX.setdefault(state, {})
-            COUNTY_INDEX[state][norm] = {
+            COUNTY_INDEX.setdefault(state,{})
+            COUNTY_INDEX[state][county_norm] = {
                 "key": key,
-                "size": size,
+                "size": obj["Size"],
                 "raw_name": base,
             }
-            total += 1
 
-    logging.info("[BOOT] Indexed %d cleaned county datasets.", total)
+    logging.info("[BOOT] Index built. %d counties loaded.", sum(len(v) for v in COUNTY_INDEX.values()))
 
+build_index()
 
-build_county_index()
+# ------------------------------------------------------------
+# QUERY PARSING
+# ------------------------------------------------------------
 
-# -------------------------------------------------------------------
-# QUERY PARSING: LOCATION + FILTERS
-# -------------------------------------------------------------------
-
-def parse_query_location(query: str) -> tuple[str | None, str | None]:
-    """
-    Try to extract (state_code, county_name) from text like:
-    - 'homes in wakulla county florida over 200k income'
-    - 'residential addresses in Cuyahoga county Ohio'
-    """
+def parse_location(query):
     q = query.lower()
     tokens = q.split()
 
-    # find 'county' / 'parish' / 'borough'
     county_idx = None
-    county_word = None
-    for i, tok in enumerate(tokens):
-        if tok in ("county", "parish", "borough"):
+    for i,tok in enumerate(tokens):
+        if tok in ("county","parish","borough"):
             county_idx = i
-            county_word = tok
             break
-
     if county_idx is None:
-        return None, None
+        return None,None
 
-    # find the last "in" before 'county'
+    # find "in"
     last_in = None
-    for i in range(county_idx - 1, -1, -1):
+    for i in range(county_idx):
         if tokens[i] == "in":
             last_in = i
-            break
-
     if last_in is None:
-        last_in = -1
+        return None,None
 
-    county_tokens = tokens[last_in + 1 : county_idx]
-    county_phrase = " ".join(county_tokens).strip()
-    if not county_phrase:
-        return None, None
+    county_phrase = " ".join(tokens[last_in+1:county_idx])
+    county_norm = normalize_county(county_phrase)
 
-    county_norm = normalize_county_name(county_phrase)
-    if not county_norm:
-        return None, None
-
-    # state is first recognizable state token after 'county'
+    # find state
     state_code = None
-    for t in tokens[county_idx + 1 :]:
-        candidate = t.strip(",. ")
-        st = normalize_state_name(candidate)
+    for t in tokens[county_idx+1:]:
+        st = normalize_state(t)
         if st:
             state_code = st
             break
 
     return state_code, county_norm
 
+# ------------------------------------------------------------
+# LOAD COUNTY
+# ------------------------------------------------------------
 
-def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
-    """
-    Extract (min_income, min_value) from phrases like:
-    - 'over 200k income'
-    - 'homes over 500k value'
-    """
-    q = query.lower()
-
-    def parse_amount(match: re.Match) -> float | None:
-        num_str, suffix = match.groups()
-        try:
-            val = float(num_str)
-        except ValueError:
-            return None
-        if suffix == "k":
-            val *= 1_000
-        elif suffix == "m":
-            val *= 1_000_000
-        return val
-
-    min_income = None
-    min_value = None
-
-    # pattern: "over 200k", "over 500000"
-    m_over = re.search(r"over\s+(\d+(?:\.\d+)?)(k|m)?", q)
-    if m_over:
-        amount = parse_amount(m_over)
-        if amount is not None:
-            if "income" in q:
-                min_income = amount
-            elif "value" in q or "home" in q:
-                min_value = amount
-
-    return min_income, min_value
-
-
-# -------------------------------------------------------------------
-# FEATURE HELPERS
-# -------------------------------------------------------------------
-
-def get_income(props: dict) -> float | None:
-    candidate_keys = [
-        "income",
-        "median_income",
-        "acs_income",
-        "HHINC",
-        "MEDHHINC",
-        "DP03_0062E",
-    ]
-    for k in candidate_keys:
-        if k in props:
-            v = props.get(k)
-            if v in (None, "", "-666666666"):
-                continue
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                continue
-    return None
-
-
-def get_home_value(props: dict) -> float | None:
-    candidate_keys = [
-        "home_value",
-        "median_home_value",
-        "acs_value",
-        "med_home_value",
-        "DP04_0089E",
-    ]
-    for k in candidate_keys:
-        if k in props:
-            v = props.get(k)
-            if v in (None, "", "-666666666"):
-                continue
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                continue
-    return None
-
-
-def extract_basic_fields(props: dict) -> dict:
-    def first(*keys):
-        for k in keys:
-            if not k:
-                continue
-            v = props.get(k)
-            if v not in (None, ""):
-                return v
-        return None
-
-    house = first("house_number", "HOUSE_NUM", "addr:housenumber", "HOUSE", "HOUSENUM")
-    street = first("street", "STREET", "addr:street", "ROAD", "RD_NAME")
-    city = first("city", "CITY", "City")
-    state = first("state", "STATE", "ST")
-    postal = first("zip", "ZIP", "postal_code", "POSTCODE", "ZIPCODE", "ZIP_CODE")
-
-    address = first("full_address", "address", "ADDR_FULL")
-    if not address:
-        parts = [str(house).strip() if house else None, street]
-        address = " ".join([p for p in parts if p])
-
-    return {
-        "address": address,
-        "city": city,
-        "state": state,
-        "zip": postal,
-    }
-
-
-RESIDENTIAL_VALUE_HINTS = [
-    "res",
-    "resid",
-    "single fam",
-    "single-family",
-    "sfr",
-    "sfh",
-    "duplex",
-    "triplex",
-    "quadplex",
-    "townhome",
-    "town house",
-    "condo",
-    "apartment",
-    "apt",
-    "mobile home",
-    "mh",
-]
-
-NON_RESIDENTIAL_VALUE_HINTS = [
-    "farm",
-    "agric",
-    "agri",
-    "industrial",
-    "warehouse",
-    "office",
-    "retail",
-    "church",
-    "school",
-    "gov",
-    "government",
-    "hospital",
-    "hotel",
-    "motel",
-    "vacant",
-    "land only",
-]
-
-
-def is_residential(props: dict) -> bool:
-    """
-    Heuristic: if we see clear non-residential text, mark as non-res.
-    If we see clear residential text, mark as residential.
-    Otherwise, default to True (better to include than silently drop).
-
-    Optimized to a *single pass* over string props so it scales better
-    on very large counties.
-    """
-    has_res_hint = False
-
-    for _, value in props.items():
-        if value is None or isinstance(value, (int, float)):
-            continue
-        text = str(value).lower()
-        if len(text) > 200:
-            continue
-
-        # strong non-res hints
-        if any(h in text for h in NON_RESIDENTIAL_VALUE_HINTS):
-            # unless we also see residential hint in the SAME text
-            if not any(h in text for h in RESIDENTIAL_VALUE_HINTS):
-                return False
-
-        # strong residential hints
-        if any(h in text for h in RESIDENTIAL_VALUE_HINTS):
-            has_res_hint = True
-
-    # if we saw explicit residential hints, it's definitely residential;
-    # otherwise we still default to True to avoid silently dropping stock.
-    if has_res_hint:
-        return True
-    return True
-
-
-def apply_filters_iter(
-    features,
-    min_income: float | None = None,
-    min_value: float | None = None,
-    filter_residential: bool = True,
-    max_results: int = 500,
-    max_scan: int = 200000,
-) -> tuple[list[dict], int, int]:
-    """
-    Scan features with early break to avoid timeouts on huge counties.
-    'features' can be a list or any iterable of GeoJSON features.
-
-    Returns (results, total_matches_observed, scanned_count).
-    """
-    results: list[dict] = []
-    matches = 0
-    scanned = 0
-
-    for feat in features:
-        scanned += 1
-        props = feat.get("properties", {}) or {}
-
-        if filter_residential and not is_residential(props):
-            if scanned >= max_scan and len(results) >= max_results:
-                break
-            continue
-
-        if min_income is not None:
-            inc = get_income(props)
-            if inc is None or inc < min_income:
-                if scanned >= max_scan and len(results) >= max_results:
-                    break
-                continue
-
-        if min_value is not None:
-            val = get_home_value(props)
-            if val is None or val < min_value:
-                if scanned >= max_scan and len(results) >= max_results:
-                    break
-                continue
-
-        matches += 1
-        if len(results) < max_results:
-            basic = extract_basic_fields(props)
-            basic["income"] = get_income(props)
-            basic["home_value"] = get_home_value(props)
-            results.append(basic)
-
-        if scanned >= max_scan and len(results) >= max_results:
-            break
-
-    return results, matches, scanned
-
-
-# -------------------------------------------------------------------
-# S3 LOADING
-# -------------------------------------------------------------------
-
-def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict] | tuple[None, None]:
-    """
-    Find the S3 key for (state, county) from COUNTY_INDEX and
-    load its features.
-
-    NOTE: This still loads the full GeoJSON into memory, but we now
-    clamp how many features we *scan* based on file size so we don't
-    blow the request timeout on very large counties.
-    """
-    state_code = state_code.lower()
-    county_norm = county_norm.lower()
-
-    state_map = COUNTY_INDEX.get(state_code)
+def load_features(state, county_norm):
+    state_map = COUNTY_INDEX.get(state)
     if not state_map:
-        return None, None
-
+        return None,None
     meta = state_map.get(county_norm)
     if not meta:
-        # fuzzy fallback: allow partial matches
-        for cand_norm, cand_meta in state_map.items():
-            if cand_norm == county_norm:
-                meta = cand_meta
+        # fuzzy
+        for c,m in state_map.items():
+            if county_norm in c or c in county_norm:
+                meta = m
                 break
-            if county_norm in cand_norm or cand_norm in county_norm:
-                meta = cand_meta
-                break
-
     if not meta:
-        return None, None
+        return None,None
 
     key = meta["key"]
-    size = meta["size"]
-
-    logging.info(
-        "[RESOLVE] Matched state=%s, county=%s, key=%s, size=%d",
-        state_code,
-        county_norm,
-        key,
-        size,
-    )
-
-    obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    body_bytes = obj["Body"].read()
-    data = json.loads(body_bytes)
-
-    feats = data.get("features") or []
+    body = s3.get_object(Bucket=S3_BUCKET, Key=key)["Body"].read()
+    data = json.loads(body)
+    feats = data.get("features",[])
     return feats, meta
 
-
-# -------------------------------------------------------------------
-# AUTH HELPERS
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
+# AUTH
+# ------------------------------------------------------------
 
 def require_login():
-    if not session.get("authenticated"):
-        return False
-    return True
+    return bool(session.get("authenticated"))
 
-
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
 # ROUTES
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
 
-@app.route("/health")
+@app.get("/health")
 def health():
-    return jsonify(
-        {
-            "ok": True,
-            "time": int(time.time()),
-            "env_aws_id": bool(AWS_ACCESS_KEY_ID),
-            "env_openai": bool(os.getenv("OPENAI_API_KEY")),
-        }
-    )
+    return jsonify({"ok":True})
 
-
-@app.route("/login", methods=["GET", "POST"])
+@app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method == "POST":
-        pw = request.form.get("password", "")
+    if request.method=="POST":
+        pw = request.form.get("password","")
         if pw == ACCESS_PASSWORD:
             session["authenticated"] = True
-            logging.info("[AUTH] Login success")
             return redirect(url_for("index"))
-        logging.info("[AUTH] Login failed")
-        return render_template(
-            "login.html",
-            error="Incorrect password. Please try again.",
-        )
-
+        return render_template("login.html", error="Incorrect password.")
     return render_template("login.html")
 
-
-@app.route("/logout")
+@app.get("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
 
-
-@app.route("/", methods=["GET"])
+@app.get("/")
 def index():
     if not require_login():
         return redirect(url_for("login"))
+    return render_template("index.html")
 
-    return render_template(
-        "index.html",
-        query="",
-        location=None,
-        dataset_key=None,
-        results=[],
-        total_results=0,
-        shown_results=0,
-        error=None,
-    )
+# ------------------------------------------------------------
+# SEARCH → CSV DOWNLOAD
+# ------------------------------------------------------------
 
-
-@app.route("/search", methods=["POST"])
+@app.post("/search")
 def search():
     if not require_login():
         return redirect(url_for("login"))
 
     query = (request.form.get("query") or "").strip()
-    logging.info("[SEARCH] Incoming query='%s'", query)
 
-    if not query:
+    state, county = parse_location(query)
+    if not state or not county:
         return render_template(
             "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total_results=0,
-            shown_results=0,
-            error="Please enter a search query.",
+            error="Could not resolve a county + state. Use: 'addresses in Cuyahoga County Ohio'."
         )
 
-    # 1) Parse location
-    state_code, county_norm = parse_query_location(query)
-    if not state_code or not county_norm:
-        logging.info("[RESOLVE] Failed to parse state/county from query.")
+    feats, meta = load_features(state, county)
+    if feats is None:
         return render_template(
             "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total_results=0,
-            shown_results=0,
-            error=(
-                "Couldn't resolve a (county, state) from that query. "
-                "Try including BOTH 'X County' and the full state name, "
-                "e.g. 'residential addresses in Harris County Texas'."
-            ),
+            error=f"No cleaned dataset found for {county.title()} County, {state.upper()}."
         )
 
-    # 2) Load features from S3
-    feats, meta = load_county_features(state_code, county_norm)
-    if feats is None or meta is None:
-        return render_template(
-            "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total_results=0,
-            shown_results=0,
-            error=f"Couldn't find a cleaned dataset for {county_norm.title()} County, {state_code.upper()}.",
-        )
+    # -------------------------
+    # BUILD CSV IN MEMORY
+    # -------------------------
+    output = io.StringIO()
+    writer = None
 
-    size_bytes = meta.get("size", 0)
+    for f in feats:
+        props = f.get("properties", {})
+        if writer is None:
+            writer = csv.DictWriter(output, fieldnames=list(props.keys()))
+            writer.writeheader()
+        writer.writerow(props)
 
-    # Dynamic max_scan based on file size to avoid timeouts / OOM
-    # Rough tiers tuned for your S3 sizes:
-    # - Small counties (< 50MB): scan up to 200k features
-    # - Medium (50–150MB):       scan up to 120k
-    # - Large (150–300MB):       scan up to 80k
-    # - XLarge (>= 300MB):       scan up to 50k
-    if size_bytes >= 300_000_000:
-        dynamic_max_scan = 50_000
-    elif size_bytes >= 150_000_000:
-        dynamic_max_scan = 80_000
-    elif size_bytes >= 50_000_000:
-        dynamic_max_scan = 120_000
-    else:
-        dynamic_max_scan = 200_000
+    output.seek(0)
 
-    logging.info(
-        "[SCAN] Using max_scan=%d for file size=%d bytes",
-        dynamic_max_scan,
-        size_bytes,
+    filename = f"{county}-{state}.csv"
+
+    return send_file(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name=filename
     )
 
-    # 3) Parse filters (income/value)
-    min_income, min_value = parse_numeric_filters(query)
-
-    # For now: if query mentions "residential" or "homes", apply residential filter
-    q_lower = query.lower()
-    filter_residential = (
-        ("residential" in q_lower)
-        or ("home" in q_lower)
-        or ("homes" in q_lower)
-        or ("house" in q_lower)
-    )
-
-    # 4) Apply filters with early-break to avoid timeouts
-    start = time.time()
-    results, matches, scanned = apply_filters_iter(
-        feats,
-        min_income=min_income,
-        min_value=min_value,
-        filter_residential=filter_residential,
-        max_results=500,
-        max_scan=dynamic_max_scan,
-    )
-    elapsed = time.time() - start
-
-    total_results = matches  # we only count matches we observed
-    shown_results = len(results)
-
-    logging.info(
-        "[RESULTS] query='%s' state=%s county=%s total=%d shown=%d scanned=%d time=%.2fs",
-        query,
-        state_code,
-        county_norm,
-        total_results,
-        shown_results,
-        scanned,
-        elapsed,
-    )
-
-    location_label = f"{county_norm.title()} County, {state_code.upper()}"
-
-    if total_results == 0:
-        error_msg = (
-            "No matching addresses found for that filter.\n"
-            "Try lowering the income/value threshold or adjusting the query."
-        )
-    else:
-        error_msg = None
-
-    return render_template(
-        "index.html",
-        query=query,
-        location=location_label,
-        dataset_key=meta["key"],
-        results=results,
-        total_results=total_results,
-        shown_results=shown_results,
-        error=error_msg,
-    )
-
-
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
 # ENTRYPOINT
-# -------------------------------------------------------------------
+# ------------------------------------------------------------
 
 if __name__ == "__main__":
-    # For local testing only; Render uses gunicorn app:app
     app.run(host="0.0.0.0", port=5000, debug=True)
