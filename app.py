@@ -424,12 +424,14 @@ def is_residential(props: dict) -> bool:
     Heuristic: if we see clear non-residential text, mark as non-res.
     If we see clear residential text, mark as residential.
     Otherwise, default to True (better to include than silently drop).
+
+    Optimized to a *single pass* over string props so it scales better
+    on very large counties.
     """
-    # Look at all property values that are strings and not insanely long
-    for key, value in props.items():
-        if value is None:
-            continue
-        if isinstance(value, (int, float)):
+    has_res_hint = False
+
+    for _, value in props.items():
+        if value is None or isinstance(value, (int, float)):
             continue
         text = str(value).lower()
         if len(text) > 200:
@@ -437,28 +439,23 @@ def is_residential(props: dict) -> bool:
 
         # strong non-res hints
         if any(h in text for h in NON_RESIDENTIAL_VALUE_HINTS):
-            # unless we also see very strong residential hint in same text
+            # unless we also see residential hint in the SAME text
             if not any(h in text for h in RESIDENTIAL_VALUE_HINTS):
                 return False
 
-    # strong residential hints
-    for key, value in props.items():
-        if value is None:
-            continue
-        if isinstance(value, (int, float)):
-            continue
-        text = str(value).lower()
-        if len(text) > 200:
-            continue
+        # strong residential hints
         if any(h in text for h in RESIDENTIAL_VALUE_HINTS):
-            return True
+            has_res_hint = True
 
-    # default: treat as residential
+    # if we saw explicit residential hints, it's definitely residential;
+    # otherwise we still default to True to avoid silently dropping stock.
+    if has_res_hint:
+        return True
     return True
 
 
 def apply_filters_iter(
-    features: list,
+    features,
     min_income: float | None = None,
     min_value: float | None = None,
     filter_residential: bool = True,
@@ -467,6 +464,8 @@ def apply_filters_iter(
 ) -> tuple[list[dict], int, int]:
     """
     Scan features with early break to avoid timeouts on huge counties.
+    'features' can be a list or any iterable of GeoJSON features.
+
     Returns (results, total_matches_observed, scanned_count).
     """
     results: list[dict] = []
@@ -517,6 +516,10 @@ def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict]
     """
     Find the S3 key for (state, county) from COUNTY_INDEX and
     load its features.
+
+    NOTE: This still loads the full GeoJSON into memory, but we now
+    clamp how many features we *scan* based on file size so we don't
+    blow the request timeout on very large counties.
     """
     state_code = state_code.lower()
     county_norm = county_norm.lower()
@@ -656,9 +659,11 @@ def search():
             results=[],
             total_results=0,
             shown_results=0,
-            error="Couldn't resolve a (county, state) from that query. "
-                  "Try including BOTH 'X County' and the full state name, "
-                  "e.g. 'residential addresses in Harris County Texas'.",
+            error=(
+                "Couldn't resolve a (county, state) from that query. "
+                "Try including BOTH 'X County' and the full state name, "
+                "e.g. 'residential addresses in Harris County Texas'."
+            ),
         )
 
     # 2) Load features from S3
@@ -675,12 +680,40 @@ def search():
             error=f"Couldn't find a cleaned dataset for {county_norm.title()} County, {state_code.upper()}.",
         )
 
+    size_bytes = meta.get("size", 0)
+
+    # Dynamic max_scan based on file size to avoid timeouts / OOM
+    # Rough tiers tuned for your S3 sizes:
+    # - Small counties (< 50MB): scan up to 200k features
+    # - Medium (50–150MB):       scan up to 120k
+    # - Large (150–300MB):       scan up to 80k
+    # - XLarge (>= 300MB):       scan up to 50k
+    if size_bytes >= 300_000_000:
+        dynamic_max_scan = 50_000
+    elif size_bytes >= 150_000_000:
+        dynamic_max_scan = 80_000
+    elif size_bytes >= 50_000_000:
+        dynamic_max_scan = 120_000
+    else:
+        dynamic_max_scan = 200_000
+
+    logging.info(
+        "[SCAN] Using max_scan=%d for file size=%d bytes",
+        dynamic_max_scan,
+        size_bytes,
+    )
+
     # 3) Parse filters (income/value)
     min_income, min_value = parse_numeric_filters(query)
 
     # For now: if query mentions "residential" or "homes", apply residential filter
     q_lower = query.lower()
-    filter_residential = ("residential" in q_lower) or ("home" in q_lower) or ("homes" in q_lower) or ("house" in q_lower)
+    filter_residential = (
+        ("residential" in q_lower)
+        or ("home" in q_lower)
+        or ("homes" in q_lower)
+        or ("house" in q_lower)
+    )
 
     # 4) Apply filters with early-break to avoid timeouts
     start = time.time()
@@ -690,7 +723,7 @@ def search():
         min_value=min_value,
         filter_residential=filter_residential,
         max_results=500,
-        max_scan=200000,
+        max_scan=dynamic_max_scan,
     )
     elapsed = time.time() - start
 
