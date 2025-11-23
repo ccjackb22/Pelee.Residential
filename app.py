@@ -353,6 +353,11 @@ def get_home_value(props: dict) -> float | None:
 
 
 def extract_basic_fields(props: dict) -> dict:
+    """
+    Extract core address fields *plus* number + street explicitly so
+    we can show all 1–8 columns in the UI.
+    """
+
     def first(*keys):
         for k in keys:
             if not k:
@@ -362,10 +367,19 @@ def extract_basic_fields(props: dict) -> dict:
                 return v
         return None
 
-    house = first("house_number", "HOUSE_NUM", "addr:housenumber", "HOUSE", "HOUSENUM")
+    # Include "number" for OpenAddresses-style data
+    house = first(
+        "house_number",
+        "HOUSE_NUM",
+        "addr:housenumber",
+        "HOUSE",
+        "HOUSENUM",
+        "number",
+    )
     street = first("street", "STREET", "addr:street", "ROAD", "RD_NAME")
     city = first("city", "CITY", "City")
-    state = first("state", "STATE", "ST")
+    # Include STUSPS and STATE_NAME & region as fallbacks
+    state = first("state", "STATE", "ST", "STUSPS", "STATE_NAME", "region")
     postal = first("zip", "ZIP", "postal_code", "POSTCODE", "ZIPCODE", "ZIP_CODE")
 
     address = first("full_address", "address", "ADDR_FULL")
@@ -375,6 +389,8 @@ def extract_basic_fields(props: dict) -> dict:
 
     return {
         "address": address,
+        "number": house,
+        "street": street,
         "city": city,
         "state": state,
         "zip": postal,
@@ -504,6 +520,7 @@ def apply_filters_iter(
         matches += 1
         if len(results) < max_results:
             basic = extract_basic_fields(props)
+            # add metrics for UI (1–8 columns)
             basic["income"] = inc
             basic["home_value"] = val
             results.append(basic)
@@ -686,7 +703,7 @@ def search():
             download_available=False,
         )
 
-    # 3) Parse filters (income/value) — still supported, but we don't promise miracles
+    # 3) Parse filters (income/value)
     min_income, min_value = parse_numeric_filters(query)
 
     q_lower = query.lower()
@@ -867,7 +884,7 @@ def download_csv():
             buffer.seek(0)
             buffer.truncate(0)
 
-    # Filename: <county>_<state>_<timestamp>.csv (user choice #3)
+    # Filename: <county>_<state>_<timestamp>.csv
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_county = re.sub(r"[^a-z0-9]+", "_", county_norm.lower())
     filename = f"{safe_county}_{state_code.lower()}_{ts}.csv"
