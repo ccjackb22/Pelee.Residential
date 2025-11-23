@@ -74,9 +74,7 @@
         }
 
         @media (max-width: 800px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-            }
+            .main-grid { grid-template-columns: 1fr; }
         }
 
         .hero-title {
@@ -174,9 +172,7 @@
             margin-bottom: 10px;
         }
 
-        input::placeholder {
-            color: #64748b;
-        }
+        input::placeholder { color: #64748b; }
 
         .btn {
             width: 100%;
@@ -206,10 +202,9 @@
         }
 
         .footnote {
-            margin-top: 12px;
+            margin-top: 16px;
             font-size: 11px;
             color: var(--muted);
-            text-align: center;
         }
     </style>
 </head>
@@ -228,22 +223,22 @@
         <div>
             <div class="hero-title">U.S. location data — organized, indexed, and searchable.</div>
             <div class="hero-sub">
-                A private console for exploring structured datasets across every region,
-                using natural-language queries and instant export tools.
+                A private console for deep exploration of structured datasets across every region,
+                powered by natural-language search and instant export tools.
             </div>
 
             <div class="stat-row">
-                <div class="stat-pill"><strong>3,143</strong> U.S. counties indexed</div>
-                <div class="stat-pill"><strong>Structured datasets</strong> unified</div>
-                <div class="stat-pill"><strong>Instant CSV</strong> export tools</div>
+                <div class="stat-pill"><strong>3,143</strong> counties indexed nationwide</div>
+                <div class="stat-pill"><strong>Unified datasets</strong> across multiple sources</div>
+                <div class="stat-pill"><strong>Instant CSV</strong> export & filtering tools</div>
             </div>
 
             <div class="examples">
                 <div class="examples-label">Example query patterns</div>
                 <div class="example-chip-row">
-                    <div class="example-chip">"addresses in Cuyahoga County"</div>
-                    <div class="example-chip">"properties in Brevard County"</div>
-                    <div class="example-chip">"ZIP 44116 dataset"</div>
+                    <div class="example-chip">"addresses near Palo Alto"</div>
+                    <div class="example-chip">"homes in Santa Clara County"</div>
+                    <div class="example-chip">"Mountain View commercial properties"</div>
                 </div>
             </div>
 
@@ -270,9 +265,7 @@
                 {% endif %}
             </form>
 
-            <div class="footnote">
-                Update <code>PELEE_PASSWORD</code> in your environment to reset access.
-            </div>
+            <!-- Note removed as requested -->
         </div>
     </div>
 
