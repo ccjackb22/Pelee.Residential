@@ -56,6 +56,10 @@
             height: 28px;
             width: auto;
             object-fit: contain;
+            border-radius: 999px; /* in case the image is round-ish */
+            box-shadow:
+                0 0 12px rgba(56,189,248,0.8),
+                0 0 24px rgba(56,189,248,0.4);
         }
 
         .logo {
@@ -152,7 +156,7 @@
         .login-card {
             background: var(--card);
             border-radius: 18px;
-            padding: 22px 20px;
+            padding: 22px 20px 18px;
             border: 1px solid var(--border);
             box-shadow: 0 22px 70px rgba(0,0,0,0.75);
         }
