@@ -16,9 +16,7 @@
             --muted: #94a3b8;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -46,7 +44,6 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 24px;
-            gap: 12px;
         }
 
         .logo {
@@ -56,9 +53,7 @@
             text-transform: uppercase;
         }
 
-        .logo span {
-            color: var(--accent);
-        }
+        .logo span { color: var(--accent); }
 
         .pill-small {
             font-size: 11px;
@@ -79,13 +74,8 @@
         }
 
         @media (max-width: 800px) {
-            .shell {
-                padding: 24px 18px 20px;
-            }
-
             .main-grid {
                 grid-template-columns: 1fr;
-                gap: 24px;
             }
         }
 
@@ -114,9 +104,6 @@
             border: 1px solid rgba(148,163,184,0.4);
             background: rgba(15,23,42,0.9);
             font-size: 12px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
             color: var(--muted);
         }
 
@@ -150,7 +137,6 @@
             border: 1px solid rgba(51,65,85,0.9);
             background: rgba(15,23,42,0.95);
             color: #cbd5f5;
-            white-space: nowrap;
         }
 
         .login-card {
@@ -166,7 +152,7 @@
             text-transform: uppercase;
             letter-spacing: 0.16em;
             color: var(--muted);
-            margin-bottom: 10px;
+            margin-bottom: 12px;
         }
 
         label {
@@ -175,6 +161,7 @@
             margin-bottom: 6px;
         }
 
+        input[type="text"],
         input[type="password"] {
             width: 100%;
             padding: 10px 12px;
@@ -184,15 +171,16 @@
             color: var(--text);
             font-size: 14px;
             outline: none;
+            margin-bottom: 10px;
         }
 
-        input[type="password"]::placeholder {
+        input::placeholder {
             color: #64748b;
         }
 
         .btn {
             width: 100%;
-            margin-top: 14px;
+            margin-top: 6px;
             padding: 10px 0;
             border-radius: 999px;
             border: none;
@@ -205,9 +193,7 @@
             color: #020617;
         }
 
-        .btn:hover {
-            filter: brightness(1.05);
-        }
+        .btn:hover { filter: brightness(1.05); }
 
         .error {
             margin-top: 10px;
@@ -220,7 +206,7 @@
         }
 
         .footnote {
-            margin-top: 10px;
+            margin-top: 12px;
             font-size: 11px;
             color: var(--muted);
             text-align: center;
@@ -233,55 +219,50 @@
 
     <div class="top-row">
         <div class="logo"><span>PELÉE</span> AI</div>
-        <div class="pill-small">Internal data export console</div>
+        <div class="pill-small">Restricted access</div>
     </div>
 
     <div class="main-grid">
-        <!-- LEFT: PRODUCT PITCH -->
+
+        <!-- LEFT: Product Pitch -->
         <div>
-            <div class="hero-title">Enriched U.S. address data, ready for export.</div>
+            <div class="hero-title">U.S. location data — organized, indexed, and searchable.</div>
             <div class="hero-sub">
-                Natural-language search across cleaned residential & commercial datasets,
-                with income and home value enrichment.
+                A private console for exploring structured datasets across every region,
+                using natural-language queries and instant export tools.
             </div>
 
             <div class="stat-row">
-                <div class="stat-pill">
-                    <strong>~1,800</strong>
-                    mapped & enriched counties
-                </div>
-                <div class="stat-pill">
-                    <strong>Income + value</strong>
-                    per address
-                </div>
-                <div class="stat-pill">
-                    <strong>Instant CSV</strong>
-                    exports for targeting
-                </div>
+                <div class="stat-pill"><strong>3,143</strong> U.S. counties indexed</div>
+                <div class="stat-pill"><strong>Structured datasets</strong> unified</div>
+                <div class="stat-pill"><strong>Instant CSV</strong> export tools</div>
             </div>
 
             <div class="examples">
-                <div class="examples-label">Example queries</div>
+                <div class="examples-label">Example query patterns</div>
                 <div class="example-chip-row">
-                    <div class="example-chip">"residential addresses in Cuyahoga County Ohio"</div>
-                    <div class="example-chip">"homes in Brevard County Florida over $500k"</div>
-                    <div class="example-chip">"ZIP 44116 residential addresses"</div>
+                    <div class="example-chip">"addresses in Cuyahoga County"</div>
+                    <div class="example-chip">"properties in Brevard County"</div>
+                    <div class="example-chip">"ZIP 44116 dataset"</div>
                 </div>
+            </div>
+
+            <div class="footnote" style="margin-top: 20px; text-align:left;">
+                Contact us for enterprise access: <strong>sales@pelee.ai</strong>
             </div>
         </div>
 
-        <!-- RIGHT: LOGIN CARD -->
+        <!-- RIGHT: Login -->
         <div class="login-card">
-            <div class="login-title">Restricted access</div>
+            <div class="login-title">Login Required</div>
+
             <form method="POST">
-                <label for="password">Access password</label>
-                <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    placeholder="Enter password"
-                    autofocus
-                />
+                <label for="username">Username</label>
+                <input id="username" name="username" type="text" placeholder="Enter username">
+
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" placeholder="Enter password">
+
                 <button class="btn" type="submit">Enter</button>
 
                 {% if error %}
@@ -290,7 +271,7 @@
             </form>
 
             <div class="footnote">
-                Password-controlled access. Update <code>PELEE_PASSWORD</code> in your environment to reset.
+                Update <code>PELEE_PASSWORD</code> in your environment to reset access.
             </div>
         </div>
     </div>
