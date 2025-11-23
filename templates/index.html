@@ -1,702 +1,475 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Pelée AI – Internal Data Tool</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-  <style>
-    :root {
-      --bg: #020617;
-      --bg-soft: #020818;
-      --card: #020617;
-      --card-soft: #020818;
-      --accent: #38bdf8;
-      --accent-soft: rgba(56, 189, 248, 0.1);
-      --accent-strong: #0ea5e9;
-      --border-soft: rgba(148, 163, 184, 0.25);
-      --text-main: #e5e7eb;
-      --text-muted: #9ca3af;
-      --danger: #f97373;
-      --success: #4ade80;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent 55%),
-                  radial-gradient(circle at bottom, rgba(59, 130, 246, 0.08), transparent 55%),
-                  #020617;
-      color: var(--text-main);
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-    }
-
-    .page {
-      max-width: 1100px;
-      width: 100%;
-      padding: 32px 16px 48px;
-      margin: 0 auto;
-    }
-
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      gap: 16px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .brand-logo {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
-      background: radial-gradient(circle at 30% 20%, #facc15, #fb923c 40%, #0ea5e9 75%);
-      box-shadow: 0 0 40px rgba(56, 189, 248, 0.4);
-    }
-
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .brand-title {
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      font-size: 14px;
-      text-transform: uppercase;
-      color: #e5e7eb;
-    }
-
-    .brand-subtitle {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .user-controls {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 12px;
-      color: var(--text-muted);
-    }
-
-    .badge {
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border-soft);
-      background: rgba(15, 23, 42, 0.7);
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .badge-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: var(--success);
-      box-shadow: 0 0 10px rgba(74, 222, 128, 0.7);
-    }
-
-    .logout-link {
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      background: transparent;
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 12px;
-      transition: all 0.18s ease-out;
-    }
-
-    .logout-link:hover {
-      background: rgba(15, 23, 42, 0.9);
-      color: #e5e7eb;
-      border-color: rgba(148, 163, 184, 0.8);
-    }
-
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 2.2fr);
-      gap: 16px;
-    }
-
-    @media (max-width: 900px) {
-      .layout {
-        grid-template-columns: minmax(0, 1fr);
-      }
-    }
-
-    .card {
-      border-radius: 24px;
-      border: 1px solid var(--border-soft);
-      background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.10), transparent 60%),
-                  rgba(15, 23, 42, 0.92);
-      padding: 20px 20px 18px;
-      box-shadow:
-        0 20px 45px rgba(15, 23, 42, 0.8),
-        0 0 0 1px rgba(15, 23, 42, 0.7);
-      backdrop-filter: blur(20px);
-    }
-
-    .card-right {
-      background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.10), transparent 60%),
-                  rgba(15, 23, 42, 0.95);
-    }
-
-    .card-header {
-      margin-bottom: 10px;
-    }
-
-    .card-title {
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
-    }
-
-    .card-subtitle {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-top: 4px;
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin: 10px 0 14px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .pill {
-      padding: 4px 9px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.3);
-      background: rgba(15, 23, 42, 0.85);
-    }
-
-    .pill-strong {
-      border-color: rgba(56, 189, 248, 0.5);
-      background: rgba(8, 47, 73, 0.95);
-      color: #e5e7eb;
-    }
-
-    .query-form {
-      margin-top: 6px;
-    }
-
-    .query-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 10px;
-      align-items: stretch;
-    }
-
-    .query-input {
-      flex: 1;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.98));
-      padding: 10px 14px;
-      color: var(--text-main);
-      font-size: 14px;
-      outline: none;
-      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
-    }
-
-    .query-input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .query-input:focus {
-      border-color: var(--accent);
-      box-shadow:
-        0 0 0 1px rgba(15, 23, 42, 0.98),
-        0 0 0 1px rgba(56, 189, 248, 0.6),
-        0 0 18px rgba(56, 189, 248, 0.45);
-    }
-
-    .btn-primary {
-      border-radius: 999px;
-      border: none;
-      padding: 10px 18px;
-      font-size: 14px;
-      font-weight: 500;
-      background: radial-gradient(circle at top left, var(--accent-strong), #0369a1);
-      color: #0b1120;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      white-space: nowrap;
-      box-shadow:
-        0 12px 25px rgba(56, 189, 248, 0.4),
-        0 0 0 1px rgba(8, 47, 73, 0.9);
-      transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow:
-        0 18px 40px rgba(56, 189, 248, 0.55),
-        0 0 0 1px rgba(8, 47, 73, 1);
-    }
-
-    .btn-primary:active {
-      transform: translateY(0px) scale(0.98);
-      box-shadow:
-        0 10px 20px rgba(56, 189, 248, 0.4),
-        0 0 0 1px rgba(8, 47, 73, 1);
-    }
-
-    .btn-primary span.icon {
-      font-size: 15px;
-    }
-
-    .hint {
-      margin-top: 10px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .examples-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 6px;
-    }
-
-    .example-pill {
-      padding: 4px 8px;
-      border-radius: 999px;
-      border: 1px dashed rgba(148, 163, 184, 0.4);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .status-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-top: 8px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 999px;
-      background: var(--success);
-      box-shadow: 0 0 10px rgba(34, 197, 94, 0.85);
-      margin-right: 6px;
-    }
-
-    .status-strong {
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-
-    .results-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 10px;
-      margin-bottom: 8px;
-    }
-
-    .results-title {
-      font-size: 15px;
-      font-weight: 500;
-    }
-
-    .results-meta {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: right;
-    }
-
-    .results-meta span {
-      display: block;
-    }
-
-    .results-meta strong {
-      color: #e5e7eb;
-    }
-
-    .results-summary {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-bottom: 10px;
-    }
-
-    .results-error {
-      font-size: 12px;
-      color: var(--danger);
-      margin-bottom: 10px;
-    }
-
-    .results-table-wrap {
-      border-radius: 14px;
-      border: 1px solid rgba(148, 163, 184, 0.4);
-      background: linear-gradient(135deg, rgba(15, 23, 42, 0.97), rgba(15, 23, 42, 0.99));
-      max-height: 360px;
-      overflow: auto;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-    }
-
-    th, td {
-      padding: 8px 10px;
-      text-align: left;
-      border-bottom: 1px solid rgba(31, 41, 55, 0.9);
-    }
-
-    th {
-      position: sticky;
-      top: 0;
-      background: rgba(15, 23, 42, 0.98);
-      font-weight: 500;
-      color: var(--text-muted);
-      z-index: 1;
-    }
-
-    tr:last-child td {
-      border-bottom: none;
-    }
-
-    tr:nth-child(even) td {
-      background: rgba(15, 23, 42, 0.98);
-    }
-
-    tr:nth-child(odd) td {
-      background: rgba(15, 23, 42, 0.93);
-    }
-
-    .pill-tag {
-      display: inline-flex;
-      align-items: center;
-      padding: 3px 7px;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.5);
-      font-size: 10px;
-      color: var(--text-muted);
-      gap: 5px;
-    }
-
-    .pill-tag-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.9);
-    }
-
-    .value-high {
-      color: #fbbf24;
-      font-weight: 500;
-    }
-
-    .value-low {
-      color: #9ca3af;
-    }
-
-    .footer-note {
-      margin-top: 16px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .download-form {
-      margin-top: 8px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .btn-secondary {
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      padding: 8px 14px;
-      font-size: 12px;
-      font-weight: 400;
-      background: rgba(15, 23, 42, 0.95);
-      color: var(--text-main);
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.12s ease-out;
-    }
-
-    .btn-secondary:hover {
-      border-color: var(--accent);
-      box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
-    }
-
-    .btn-secondary.btn-disabled,
-    .btn-secondary:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      border-style: dashed;
-      box-shadow: none;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <title>PELÉE AI | Address Search</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        :root {
+            --bg: #020617;
+            --bg-elevated: #020617;
+            --card: #020617;
+            --accent: #38bdf8;
+            --accent-soft: rgba(56, 189, 248, 0.15);
+            --border-subtle: rgba(148, 163, 184, 0.6);
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --danger: #fecaca;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            background:
+                radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            padding: 32px 16px;
+        }
+
+        .shell {
+            width: 100%;
+            max-width: 1040px;
+            background: radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 55%),
+                        radial-gradient(circle at top right, rgba(34,197,94,0.05), transparent 55%),
+                        rgba(15,23,42,0.98);
+            border-radius: 20px;
+            padding: 22px 22px 20px;
+            border: 1px solid rgba(148,163,184,0.5);
+            box-shadow: 0 24px 80px rgba(15,23,42,0.85);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .brand-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: 0.16em;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .tagline {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .user-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-actions a {
+            text-decoration: none;
+        }
+
+        .btn-ghost {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.6);
+            padding: 6px 12px;
+            background: rgba(15,23,42,0.85);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .btn-ghost:hover {
+            border-color: rgba(148,163,184,1);
+            color: #e5e7eb;
+        }
+
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .panel {
+            border-radius: 16px;
+            border: 1px solid rgba(51,65,85,0.95);
+            background: rgba(15,23,42,0.96);
+            padding: 14px 14px 12px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .panel-title {
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .pill {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 999px;
+            padding: 4px 10px;
+            border: 1px solid rgba(56,189,248,0.7);
+            color: var(--accent);
+            background: rgba(15,23,42,0.85);
+        }
+
+        .search-row {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        @media (min-width: 720px) {
+            .search-row {
+                flex-direction: row;
+                align-items: center;
+            }
+        }
+
+        .search-input-wrap {
+            flex: 1;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 11px 10px 32px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.7);
+            background: radial-gradient(circle at top left, rgba(15,23,42,0.95), #020617);
+            color: var(--text-main);
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .btn-primary {
+            border-radius: 999px;
+            border: none;
+            padding: 10px 18px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            background: linear-gradient(90deg, #0ea5e9, #22c55e);
+            color: #020617;
+            white-space: nowrap;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.05);
+        }
+
+        .hint-row {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .hint-row code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            background: rgba(15,23,42,0.8);
+            border-radius: 999px;
+            padding: 2px 8px;
+            border: 1px solid rgba(148,163,184,0.35);
+            color: #e5e7eb;
+        }
+
+        .error {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--danger);
+            background: rgba(127,29,29,0.9);
+            border-radius: 10px;
+            padding: 8px 10px;
+            border: 1px solid rgba(248,113,113,0.85);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .results-header strong {
+            color: #e5e7eb;
+        }
+
+        .download-form {
+            margin: 0;
+        }
+
+        .btn-secondary {
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.9);
+            background: rgba(15,23,42,0.9);
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            color: #e5e7eb;
+        }
+
+        .results-table-wrap {
+            border-radius: 12px;
+            border: 1px solid rgba(30,64,175,0.9);
+            background: radial-gradient(circle at top left, rgba(30,64,175,0.6), rgba(15,23,42,0.9));
+            overflow: hidden;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .results-table thead {
+            background: rgba(15,23,42,0.98);
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 7px 8px;
+            border-bottom: 1px solid rgba(30,64,175,0.65);
+            text-align: left;
+        }
+
+        .results-table th {
+            font-size: 11px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.11em;
+        }
+
+        .results-table tbody tr:nth-child(even) {
+            background: rgba(15,23,42,0.85);
+        }
+
+        .results-table tbody tr:nth-child(odd) {
+            background: rgba(15,23,42,0.93);
+        }
+
+        .results-table tbody tr:hover {
+            background: rgba(15,23,42,1);
+        }
+
+        .metric-pill {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 7px;
+            border: 1px solid rgba(52,211,153,0.7);
+            font-size: 11px;
+            color: #bbf7d0;
+            background: rgba(6,78,59,0.8);
+        }
+
+        .metric-pill.income {
+            border-color: rgba(59,130,246,0.7);
+            color: #bfdbfe;
+            background: rgba(30,64,175,0.85);
+        }
+
+        .metric-pill span {
+            opacity: 0.9;
+        }
+
+        .subtext {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .subtext strong {
+            color: #e5e7eb;
+        }
+    </style>
 </head>
 <body>
-  <div class="page">
+<div class="shell">
     <header>
-      <div class="brand">
-        <div class="brand-logo"></div>
-        <div class="brand-text">
-          <div class="brand-title">PELÉE AI</div>
-          <div class="brand-subtitle">Internal Data Tool · Residential + Commercial</div>
+        <div class="brand-block">
+            <div class="logo"><span>PELÉE</span> AI</div>
+            <div class="tagline">Internal data tool · residential + commercial address discovery</div>
         </div>
-      </div>
-      <div class="user-controls">
-        <div class="badge">
-          <span class="badge-dot"></span>
-          <span>Connected to S3 · <strong>US coverage</strong></span>
+        <div class="user-actions">
+            <form action="{{ url_for('logout') }}" method="GET">
+                <button type="submit" class="btn-ghost">Logout</button>
+            </form>
         </div>
-        <a class="logout-link" href="/logout">Logout</a>
-      </div>
     </header>
 
-    <div class="layout">
-      <!-- LEFT: Query / Input -->
-      <section class="card">
-        <div class="card-header">
-          <div class="card-title">AI-powered address discovery</div>
-          <div class="card-subtitle">
-            Resolve any cleaned county dataset by typing the county + state. Pelée will return a small preview
-            and let you download the full county file as CSV for analysis in Excel or your own tools.
-          </div>
-        </div>
-
-        <div class="pill-row">
-          <div class="pill pill-strong">US addresses on S3</div>
-          <div class="pill">County-level exports</div>
-          <div class="pill">Residential / basic filters</div>
-          <div class="pill">CSV download</div>
-          <div class="pill">Instant CSV export (UI only, for now)</div>
-        </div>
-
-        <form class="query-form" method="POST" action="/search">
-          <div class="query-label">Search</div>
-          <div class="input-row">
-            <input
-              type="text"
-              name="query"
-              id="query"
-              class="query-input"
-              autocomplete="off"
-              placeholder="e.g. residential addresses in Wakulla County Florida"
-              value="{{ query or '' }}"
-            />
-            <button class="btn-primary" type="submit">
-              <span class="icon">🔍</span>
-              <span>Search</span>
-            </button>
-          </div>
-
-          <div class="hint">
-            Include the exact county name, the word <strong>“County”</strong>, and the full state name.
-            Examples:
-            <div class="examples-list">
-              <span class="example-pill">“residential addresses in Wakulla County Florida”</span>
-              <span class="example-pill">“all addresses in Walton County Florida”</span>
-              <span class="example-pill">“addresses in Washington County Florida”</span>
+    <main>
+        <!-- SEARCH PANEL -->
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Simple natural-language search</div>
+                <div class="pill">Instant CSV export</div>
             </div>
-          </div>
-        </form>
 
-        <div class="status-row">
-          <div>
-            <span class="status-dot"></span>
-            <span class="status-strong">Dataset index ready</span>
-          </div>
-          <div>1767 cleaned county datasets · 98 GB on S3 (approx)</div>
-        </div>
-      </section>
-
-      <!-- RIGHT: Results -->
-      <section class="card card-right">
-        <div class="results-header">
-          <div class="results-title">
-            {% if query %}
-              Results preview
-            {% else %}
-              Ready when you are
-            {% endif %}
-          </div>
-          <div class="results-meta">
-            {% if query %}
-              <span><strong>Query:</strong> {{ query }}</span>
-            {% else %}
-              <span>Run a county + state search on the left.</span>
-            {% endif %}
-          </div>
-        </div>
-
-        {% if error %}
-          <div class="results-error">
-            {{ error }}
-          </div>
-        {% endif %}
-
-        {% if query %}
-          <div class="results-summary">
-            {% if location %}
-              <div><strong>Location:</strong> {{ location }}</div>
-            {% endif %}
-            {% if dataset_key %}
-              <div><strong>Dataset:</strong> {{ dataset_key }}</div>
-            {% endif %}
-            {% if total is not none %}
-              <div>
-                <strong>Preview:</strong>
-                Showing {{ shown or 0 }} rows from this county-level dataset.
-                Download CSV to work with all matching rows.
-              </div>
-            {% endif %}
-          </div>
-        {% else %}
-          <div class="results-summary">
-            Type a description including county + state (and optional income/value hints) and Pelée will:
-            <ul>
-              <li>Resolve it to a cleaned S3 county dataset</li>
-              <li>Show a small preview of matching rows</li>
-              <li>Let you export the full dataset as CSV for deeper analysis</li>
-            </ul>
-          </div>
-        {% endif %}
-
-        {% if results %}
-          <div class="results-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Address</th>
-                  <th>City</th>
-                  <th>State</th>
-                  <th>ZIP</th>
-                  <th>Est. Income</th>
-                  <th>Est. Value</th>
-                  <th>Tags</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in results %}
-                  <tr>
-                    <td>{{ row.address or row.Address or row.full_address or '' }}</td>
-                    <td>{{ row.city or row.City or '' }}</td>
-                    <td>{{ row.state or row.State or '' }}</td>
-                    <td>{{ row.zip or row.Zip or row.postal_code or '' }}</td>
-                    <td class="{{ (row.income or row.estimated_income or 0) | int >= 200000 and 'value-high' or 'value-low' }}">
-                      {% if row.income or row.estimated_income %}
-                        ${{ (row.income or row.estimated_income) | int }}
-                      {% else %}
-                        —
-                      {% endif %}
-                    </td>
-                    <td>
-                      {% if row.home_value or row.value or row.estimated_value %}
-                        ${{ (row.home_value or row.value or row.estimated_value) | int }}
-                      {% else %}
-                        —
-                      {% endif %}
-                    </td>
-                    <td>
-                      <span class="pill-tag">
-                        <span class="pill-tag-dot"></span>
-                        {% if row.landuse or row.land_use %}
-                          {{ row.landuse or row.land_use }}
-                        {% else %}
-                          Residential
-                        {% endif %}
-                      </span>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-
-          {% if download_available %}
-            <form method="POST" action="/download" class="download-form">
-              <input type="hidden" name="query" value="{{ query }}">
-              <button type="submit" class="btn-secondary" id="download-btn">
-                ⬇️ Download full CSV
-              </button>
-              <button type="button" class="btn-secondary btn-disabled" id="explore-btn" disabled>
-                🔍 Explore full results (after download)
-              </button>
+            <form method="POST" action="{{ url_for('search') }}">
+                <div class="search-row">
+                    <div class="search-input-wrap">
+                        <span class="search-icon">🔍</span>
+                        <input
+                            class="search-input"
+                            type="text"
+                            name="query"
+                            placeholder="Example: residential addresses in Wakulla County Florida over 200k income"
+                            value="{{ query or '' }}"
+                            autocomplete="off"
+                        />
+                    </div>
+                    <button type="submit" class="btn-primary">Search</button>
+                </div>
             </form>
-          {% endif %}
-        {% elif query %}
-          <div class="results-summary">
-            No matching addresses found. Try:
-            <ul>
-              <li>Removing income / value phrases from the query</li>
-              <li>Checking the county spelling and including the word “County”</li>
-              <li>Using a different county + state combination</li>
-            </ul>
-          </div>
-        {% endif %}
 
-        <div class="footer-note">
-          CSV export returns all matching rows with both friendly fields and the full raw properties from S3.
-          Use Excel, Python, or BI tools for deeper exploration. On-screen explore mode will be expanded later.
-        </div>
-      </section>
-    </div>
-  </div>
+            <div class="hint-row">
+                Examples:
+                <code>residential addresses in Cuyahoga County Ohio</code>
+                 ·
+                <code>homes in Wakulla County Florida over 150k income</code>
+            </div>
 
-  <script>
-    (function () {
-      const downloadBtn = document.getElementById('download-btn');
-      const exploreBtn = document.getElementById('explore-btn');
+            {% if error %}
+            <div class="error">
+                {{ error }}
+            </div>
+            {% endif %}
+        </section>
 
-      if (!downloadBtn || !exploreBtn) return;
+        <!-- RESULTS PANEL -->
+        <section class="panel">
+            <div class="results-header">
+                <div>
+                    {% if location %}
+                        <strong>{{ shown }}</strong> of
+                        <strong>{{ total if total is not none else 0 }}</strong>
+                        matches in <strong>{{ location }}</strong>
+                    {% else %}
+                        No search run yet. Enter a query with county + state to begin.
+                    {% endif %}
+                </div>
 
-      // Enable explore only after user clicks download
-      downloadBtn.addEventListener('click', function () {
-        exploreBtn.disabled = false;
-        exploreBtn.classList.remove('btn-disabled');
-      });
+                {% if download_available %}
+                <form class="download-form" method="POST" action="{{ url_for('download_csv') }}">
+                    <input type="hidden" name="query" value="{{ query or '' }}" />
+                    <button type="submit" class="btn-secondary">
+                        ⬇️ Download full CSV
+                    </button>
+                </form>
+                {% endif %}
+            </div>
 
-      exploreBtn.addEventListener('click', function () {
-        if (exploreBtn.disabled) return;
-        // Placeholder behavior for now – can wire to a richer explorer later
-        alert('Explore mode will open richer in-browser tools later. For now, use the CSV in Excel or your own stack.');
-      });
-    })();
-  </script>
+            <div class="results-table-wrap">
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Full Address</th>
+                            <th>#</th>
+                            <th>Street</th>
+                            <th>City</th>
+                            <th>State</th>
+                            <th>ZIP</th>
+                            <th>Income</th>
+                            <th>Home Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if results and results|length > 0 %}
+                            {% for r in results %}
+                            <tr>
+                                <td>{{ r.address or '' }}</td>
+                                <td>{{ r.number or '' }}</td>
+                                <td>{{ r.street or '' }}</td>
+                                <td>{{ r.city or '' }}</td>
+                                <td>{{ r.state or '' }}</td>
+                                <td>{{ r.zip or '' }}</td>
+                                <td>
+                                    {% if r.income is not none %}
+                                        <span class="metric-pill income">
+                                            ${{ "{:,.0f}".format(r.income) }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if r.home_value is not none %}
+                                        <span class="metric-pill">
+                                            ${{ "{:,.0f}".format(r.home_value) }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" style="text-align:center; color: var(--text-muted); padding: 10px 0;">
+                                    {% if location %}
+                                        No preview results to display yet. Try widening your filters.
+                                    {% else %}
+                                        Waiting for a search query.
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subtext">
+                Showing up to <strong>20</strong> preview rows from the cleaned county dataset.
+                Use the CSV export for the full result set.
+            </div>
+        </section>
+    </main>
+</div>
 </body>
 </html>
