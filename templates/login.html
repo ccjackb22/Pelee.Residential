@@ -46,6 +46,18 @@
             margin-bottom: 24px;
         }
 
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-img {
+            height: 28px;
+            width: auto;
+            object-fit: contain;
+        }
+
         .logo {
             font-size: 22px;
             font-weight: 700;
@@ -140,7 +152,7 @@
         .login-card {
             background: var(--card);
             border-radius: 18px;
-            padding: 22px 20px 18px;
+            padding: 22px 20px;
             border: 1px solid var(--border);
             box-shadow: 0 22px 70px rgba(0,0,0,0.75);
         }
@@ -213,7 +225,10 @@
 <div class="shell">
 
     <div class="top-row">
-        <div class="logo"><span>PELÉE</span> AI</div>
+        <div class="logo-group">
+            <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
+            <div class="logo"><span>PELÉE</span> AI</div>
+        </div>
         <div class="pill-small">Restricted access</div>
     </div>
 
@@ -265,7 +280,6 @@
                 {% endif %}
             </form>
 
-            <!-- Note removed as requested -->
         </div>
     </div>
 
