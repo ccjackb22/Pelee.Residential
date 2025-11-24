@@ -56,7 +56,7 @@
             height: 28px;
             width: auto;
             object-fit: contain;
-            border-radius: 999px; /* in case the image is round-ish */
+            border-radius: 999px;
             box-shadow:
                 0 0 12px rgba(56,189,248,0.8),
                 0 0 24px rgba(56,189,248,0.4);
@@ -80,6 +80,20 @@
             border: 1px solid rgba(148,163,184,0.6);
             color: var(--muted);
             background: rgba(15,23,42,0.9);
+        }
+
+        .cta-btn {
+            margin-top: 14px;
+            display: inline-block;
+            padding: 10px 18px;
+            font-size: 12px;
+            letter-spacing: 0.10em;
+            font-weight: 600;
+            text-transform: uppercase;
+            border-radius: 999px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            color: #020617;
+            text-decoration: none;
         }
 
         .main-grid {
@@ -233,42 +247,45 @@
             <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
             <div class="logo"><span>PELÉE</span> AI</div>
         </div>
-        <div class="pill-small">Restricted access</div>
+        <div class="pill-small">Private Beta</div>
     </div>
 
     <div class="main-grid">
 
         <!-- LEFT: Product Pitch -->
         <div>
-            <div class="hero-title">U.S. location data — organized, indexed, and searchable.</div>
+            <div class="hero-title">The fastest way to pull clean, enriched U.S. residential data at county scale.</div>
             <div class="hero-sub">
-                A private console for deep exploration of structured datasets across every region,
-                powered by natural-language search and instant export tools.
+                3,143 counties • 150M+ parcels • Income + home value enriched<br>
+                Search in plain English → export filtered CSVs instantly
             </div>
 
+            <a href="mailto:sales@pelee.ai" class="cta-btn">Request Enterprise Access</a>
+
             <div class="stat-row">
-                <div class="stat-pill"><strong>3,143</strong> counties indexed nationwide</div>
-                <div class="stat-pill"><strong>Unified datasets</strong> across multiple sources</div>
-                <div class="stat-pill"><strong>Instant CSV</strong> export & filtering tools</div>
+                <div class="stat-pill"><strong>150M+</strong> enriched parcels</div>
+                <div class="stat-pill"><strong>Nationwide</strong> coverage</div>
+                <div class="stat-pill"><strong>Instant CSV</strong> export</div>
             </div>
 
             <div class="examples">
-                <div class="examples-label">Example query patterns</div>
+                <div class="examples-label">Example queries</div>
                 <div class="example-chip-row">
-                    <div class="example-chip">"addresses near Palo Alto"</div>
-                    <div class="example-chip">"homes in Santa Clara County"</div>
-                    <div class="example-chip">"Mountain View commercial properties"</div>
+                    <div class="example-chip">"$1M–$3M homes in Santa Clara County"</div>
+                    <div class="example-chip">"4+ bed SFRs in Palo Alto built after 2015"</div>
+                    <div class="example-chip">"Households earning $250k+ near Mountain View"</div>
                 </div>
             </div>
 
             <div class="footnote" style="margin-top: 20px; text-align:left;">
-                Contact us for enterprise access: <strong>sales@pelee.ai</strong>
+                Private console — enterprise access only<br>
+                Contact: <strong>sales@pelee.ai</strong>
             </div>
         </div>
 
         <!-- RIGHT: Login -->
         <div class="login-card">
-            <div class="login-title">Login Required</div>
+            <div class="login-title">Enterprise Login</div>
 
             <form method="POST">
                 <label for="username">Username</label>
