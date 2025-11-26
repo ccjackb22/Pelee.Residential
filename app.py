@@ -40,6 +40,8 @@ AWS_REGION = (
     or "us-east-2"
 )
 
+# NOTE: This is the new, cleaned, ACS-enriched dataset layout:
+#   s3://residential-data-jack/merged_with_tracts_acs_clean/<state>/<county>-clean.geojson
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts_acs_clean/")
 
@@ -145,14 +147,17 @@ def normalize_state_name(text: str | None) -> str | None:
 
 
 def normalize_county_name(name: str | None) -> str | None:
+    """
+    Turn things like:
+      'harris', 'Harris County', 'harris_county', 'HARRIS COUNTY'
+    into: 'harris'
+    """
     if not name:
         return None
     n = name.strip().lower()
     n = n.replace("_", " ")
-    # keep hyphens that are actually part of names, but also allow spaces
     n = re.sub(r"[-]+", " ", n)
 
-    # remove common suffixes
     suffixes = [
         " county",
         " parish",
@@ -174,7 +179,16 @@ def normalize_county_name(name: str | None) -> str | None:
 # -------------------------------------------------------------------
 
 def build_county_index():
-    """Scan S3 once on boot and map (state, county) -> key,size."""
+    """
+    Scan S3 once on boot and map:
+      (state, normalized_county) -> {key, size, raw_name}
+
+    This reads ONLY the final cleaned files that look like:
+      <prefix>/<state>/<county>-clean.geojson
+
+    The 5201 skipped + 181 failed from the cleaner log will simply
+    not be present here.
+    """
     global COUNTY_INDEX
     logging.info(
         "[BOOT] Scanning S3 bucket=%s prefix=%s for *-clean.geojson ...",
@@ -191,15 +205,17 @@ def build_county_index():
                 continue
 
             size = obj["Size"]
-            rel = key[len(S3_PREFIX):]  # e.g. "tx/cameron-clean.geojson"
+            rel = key[len(S3_PREFIX):]  # e.g. "tx/harris-clean.geojson"
             parts = rel.split("/")
             if len(parts) != 2:
+                # unexpected layout — skip
                 continue
 
             state = parts[0].lower().strip()
             filename = parts[1]
 
-            base = filename[: -len("-clean.geojson")]  # "cameron" or "hidalgo_county"
+            # "harris-clean.geojson" -> "harris"
+            base = filename[: -len("-clean.geojson")]
             norm = normalize_county_name(base)
             if not norm:
                 continue
@@ -231,7 +247,7 @@ def parse_query_location(query: str) -> tuple[str | None, str | None]:
     tokens = q.split()
 
     # find 'county' / 'parish' / 'borough'
-    county_idx = None
+    county_idx = None    # we still require the word "County" etc to disambiguate
     for i, tok in enumerate(tokens):
         if tok in ("county", "parish", "borough"):
             county_idx = i
@@ -276,6 +292,7 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
     Extract (min_income, min_value) from phrases like:
     - 'over 200k income'
     - 'homes over 500k value'
+    - 'earning 200k+' (with 'income' in query)
     """
     q = query.lower()
 
@@ -299,9 +316,19 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
     if m_over:
         amount = parse_amount(m_over)
         if amount is not None:
-            if "income" in q:
+            if "income" in q or "earning" in q or "earners" in q:
                 min_income = amount
-            elif "value" in q or "home" in q:
+            elif "value" in q or "home" in q or "homes" in q:
+                min_value = amount
+
+    # also catch "200k+ income" form
+    m_plus = re.search(r"(\d+(?:\.\d+)?)(k|m)?\s*\+", q)
+    if m_plus:
+        amount = parse_amount(m_plus)
+        if amount is not None:
+            if "income" in q or "earning" in q or "earners" in q:
+                min_income = amount
+            elif "value" in q or "home" in q or "homes" in q:
                 min_value = amount
 
     return min_income, min_value
@@ -312,12 +339,19 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
 # -------------------------------------------------------------------
 
 def get_income(props: dict) -> float | None:
+    """
+    Try multiple possible ACS income keys. Your cleaner likely left one of:
+      - DP03_0062E (median household income)
+      - MEDHHINC / HHINC
+      - income / median_income / acs_income
+    """
     candidate_keys = [
         "income",
         "median_income",
         "acs_income",
         "HHINC",
         "MEDHHINC",
+        "MEDHHINC_2023",
         "DP03_0062E",
     ]
     for k in candidate_keys:
@@ -333,11 +367,17 @@ def get_income(props: dict) -> float | None:
 
 
 def get_home_value(props: dict) -> float | None:
+    """
+    Try multiple possible home value keys. Your cleaner likely left one of:
+      - DP04_0089E (median home value)
+      - med_home_value / median_home_value / acs_value
+    """
     candidate_keys = [
         "home_value",
         "median_home_value",
         "acs_value",
         "med_home_value",
+        "MEDVAL",
         "DP04_0089E",
     ]
     for k in candidate_keys:
@@ -378,7 +418,6 @@ def extract_basic_fields(props: dict) -> dict:
     )
     street = first("street", "STREET", "addr:street", "ROAD", "RD_NAME")
     city = first("city", "CITY", "City")
-    # Include STUSPS and STATE_NAME & region as fallbacks
     state = first("state", "STATE", "ST", "STUSPS", "STATE_NAME", "region")
     postal = first("zip", "ZIP", "postal_code", "POSTCODE", "ZIPCODE", "ZIP_CODE")
 
@@ -442,7 +481,6 @@ def is_residential(props: dict) -> bool:
     If we see clear residential text, mark as residential.
     Otherwise, default to True (better to include than silently drop).
     """
-    # Look at all property values that are strings and not insanely long
     for key, value in props.items():
         if value is None:
             continue
@@ -454,11 +492,9 @@ def is_residential(props: dict) -> bool:
 
         # strong non-res hints
         if any(h in text for h in NON_RESIDENTIAL_VALUE_HINTS):
-            # unless we also see very strong residential hint in same text
             if not any(h in text for h in RESIDENTIAL_VALUE_HINTS):
                 return False
 
-    # strong residential hints
     for key, value in props.items():
         if value is None:
             continue
@@ -470,7 +506,6 @@ def is_residential(props: dict) -> bool:
         if any(h in text for h in RESIDENTIAL_VALUE_HINTS):
             return True
 
-    # default: treat as residential
     return True
 
 
@@ -520,7 +555,6 @@ def apply_filters_iter(
         matches += 1
         if len(results) < max_results:
             basic = extract_basic_fields(props)
-            # add metrics for UI (1–8 columns)
             basic["income"] = inc
             basic["home_value"] = val
             results.append(basic)
@@ -545,11 +579,13 @@ def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict]
 
     state_map = COUNTY_INDEX.get(state_code)
     if not state_map:
+        logging.info("[RESOLVE] No state entry found in index for '%s'", state_code)
         return None, None
 
     meta = state_map.get(county_norm)
+
+    # fuzzy fallback: allow partial matches like "st johns" vs "saint johns"
     if not meta:
-        # fuzzy fallback: allow partial matches
         for cand_norm, cand_meta in state_map.items():
             if cand_norm == county_norm:
                 meta = cand_meta
@@ -559,6 +595,11 @@ def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict]
                 break
 
     if not meta:
+        logging.info(
+            "[RESOLVE] No county entry found for state=%s county_norm='%s'",
+            state_code,
+            county_norm,
+        )
         return None, None
 
     key = meta["key"]
@@ -688,7 +729,7 @@ def search():
             download_available=False,
         )
 
-    # 2) Load features from S3
+    # 2) Load features from S3 (only counties that succeeded in cleaning exist here)
     feats, meta = load_county_features(state_code, county_norm)
     if feats is None or meta is None:
         return render_template(
@@ -699,7 +740,10 @@ def search():
             results=[],
             total=None,
             shown=0,
-            error=f"Couldn't find a cleaned dataset for {county_norm.title()} County, {state_code.upper()}.",
+            error=(
+                f"Couldn't find a cleaned dataset for {county_norm.title()} County, "
+                f"{state_code.upper()}. It may have been skipped or failed during cleaning."
+            ),
             download_available=False,
         )
 
@@ -726,7 +770,7 @@ def search():
     )
     elapsed = time.time() - start
 
-    total = matches  # observed matches in the scanned window
+    total = matches
     shown = len(preview_results)
 
     logging.info(
@@ -806,7 +850,10 @@ def download_csv():
             results=[],
             total=None,
             shown=0,
-            error=f"Couldn't find a cleaned dataset for {county_norm.title()} County, {state_code.upper()} for CSV export.",
+            error=(
+                f"Couldn't find a cleaned dataset for {county_norm.title()} County, "
+                f"{state_code.upper()} for CSV export."
+            ),
             download_available=False,
         )
 
@@ -820,7 +867,6 @@ def download_csv():
         or ("house" in q_lower)
     )
 
-    # Determine all property keys across the dataset
     friendly_cols = ["address", "city", "state", "zip", "income", "home_value"]
     prop_keys: set[str] = set()
 
@@ -884,7 +930,6 @@ def download_csv():
             buffer.seek(0)
             buffer.truncate(0)
 
-    # Filename: <county>_<state>_<timestamp>.csv
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     safe_county = re.sub(r"[^a-z0-9]+", "_", county_norm.lower())
     filename = f"{safe_county}_{state_code.lower()}_{ts}.csv"
