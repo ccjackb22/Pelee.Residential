@@ -40,10 +40,20 @@ AWS_REGION = (
     or "us-east-2"
 )
 
-# NOTE: This is the new, cleaned, ACS-enriched dataset layout:
-#   s3://residential-data-jack/merged_with_tracts_acs_clean/<state>/<county>-clean.geojson
+# NEW DATASET LAYOUT (what you just uploaded):
+#
+#   s3://residential-data-jack/<state>/<county>.csv
+#
+# Example:
+#   s3://residential-data-jack/oh/cuyahoga.csv
+#   s3://residential-data-jack/fl/wakulla.csv
+#
+# Each CSV row (from addresses_enriched_acs) looks like:
+#   LON,LAT,NUMBER,STREET,UNIT,CITY,DISTRICT,REGION,POSTCODE,ID,HASH,
+#   GEOID,median_income,median_home_value,median_rent,population,median_age
+#
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
-S3_PREFIX = os.getenv("S3_PREFIX", "merged_with_tracts_acs_clean/")
+S3_PREFIX = os.getenv("S3_PREFIX", "").strip()  # IMPORTANT: leave this empty in Render
 
 ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD", "Charlotte69")
 SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(24).hex()
@@ -141,7 +151,6 @@ def normalize_state_name(text: str | None) -> str | None:
     t = text.strip().lower()
     if t in STATE_ALIASES:
         return STATE_ALIASES[t]
-    # handle things like "ohio," with punctuation
     t = t.strip(",. ")
     return STATE_ALIASES.get(t)
 
@@ -149,7 +158,7 @@ def normalize_state_name(text: str | None) -> str | None:
 def normalize_county_name(name: str | None) -> str | None:
     """
     Turn things like:
-      'harris', 'Harris County', 'harris_county', 'HARRIS COUNTY'
+      'harris', 'Harris County', 'harris_county', 'HARRIS-COUNTY'
     into: 'harris'
     """
     if not name:
@@ -175,7 +184,7 @@ def normalize_county_name(name: str | None) -> str | None:
 
 
 # -------------------------------------------------------------------
-# BOOT: BUILD COUNTY INDEX FROM S3
+# BOOT: BUILD COUNTY INDEX FROM S3 (CSV FILES)
 # -------------------------------------------------------------------
 
 def build_county_index():
@@ -183,42 +192,48 @@ def build_county_index():
     Scan S3 once on boot and map:
       (state, normalized_county) -> {key, size, raw_name}
 
-    This reads ONLY the final cleaned files that look like:
-      <prefix>/<state>/<county>-clean.geojson
-
-    The 5201 skipped + 181 failed from the cleaner log will simply
-    not be present here.
+    This reads CSV files that look like:
+      <prefix><state>/<county>.csv
+    e.g.:
+      "oh/adams.csv"
+      "tx/harris.csv"
     """
     global COUNTY_INDEX
     logging.info(
-        "[BOOT] Scanning S3 bucket=%s prefix=%s for *-clean.geojson ...",
+        "[BOOT] Scanning S3 bucket=%s prefix='%s' for *.csv ...",
         S3_BUCKET,
         S3_PREFIX,
     )
     total = 0
     paginator = s3.get_paginator("list_objects_v2")
 
-    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX):
+    prefix = S3_PREFIX
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
             key = obj["Key"]
-            if not key.endswith("-clean.geojson"):
+            if not key.endswith(".csv"):
                 continue
 
             size = obj["Size"]
-            rel = key[len(S3_PREFIX):]  # e.g. "tx/harris-clean.geojson"
+
+            # strip prefix; if prefix is "" this is just key
+            rel = key[len(prefix):] if prefix else key
             parts = rel.split("/")
             if len(parts) != 2:
                 # unexpected layout — skip
                 continue
 
             state = parts[0].lower().strip()
-            filename = parts[1]
+            filename = parts[1]  # e.g. "cuyahoga.csv"
 
-            # "harris-clean.geojson" -> "harris"
-            base = filename[: -len("-clean.geojson")]
-            norm = normalize_county_name(base)
-            if not norm:
+            if not filename.lower().endswith(".csv"):
                 continue
+
+            base = filename[:-4]  # drop ".csv"
+            norm = normalize_county_name(base) or base.lower()
 
             COUNTY_INDEX.setdefault(state, {})
             COUNTY_INDEX[state][norm] = {
@@ -228,7 +243,7 @@ def build_county_index():
             }
             total += 1
 
-    logging.info("[BOOT] Indexed %d cleaned county datasets.", total)
+    logging.info("[BOOT] Indexed %d county CSV datasets.", total)
 
 
 build_county_index()
@@ -239,15 +254,16 @@ build_county_index()
 
 def parse_query_location(query: str) -> tuple[str | None, str | None]:
     """
-    Try to extract (state_code, county_name) from text like:
-    - 'homes in wakulla county florida'
-    - 'residential addresses in Cuyahoga county Ohio'
+    Extract (state_code, county_name) from text like:
+      'homes in wakulla county florida'
+      'residential addresses in Cuyahoga County Ohio'
+
+    NOTE: Option A — we REQUIRE the word 'county' / 'parish' / 'borough'.
     """
     q = query.lower()
     tokens = q.split()
 
-    # find 'county' / 'parish' / 'borough'
-    county_idx = None    # we still require the word "County" etc to disambiguate
+    county_idx = None
     for i, tok in enumerate(tokens):
         if tok in ("county", "parish", "borough"):
             county_idx = i
@@ -256,13 +272,12 @@ def parse_query_location(query: str) -> tuple[str | None, str | None]:
     if county_idx is None:
         return None, None
 
-    # find the last "in" before 'county'
+    # last "in" before 'county'
     last_in = None
     for i in range(county_idx - 1, -1, -1):
         if tokens[i] == "in":
             last_in = i
             break
-
     if last_in is None:
         last_in = -1
 
@@ -275,7 +290,6 @@ def parse_query_location(query: str) -> tuple[str | None, str | None]:
     if not county_norm:
         return None, None
 
-    # state is first recognizable state token after 'county'
     state_code = None
     for t in tokens[county_idx + 1:]:
         candidate = t.strip(",. ")
@@ -290,9 +304,9 @@ def parse_query_location(query: str) -> tuple[str | None, str | None]:
 def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
     """
     Extract (min_income, min_value) from phrases like:
-    - 'over 200k income'
-    - 'homes over 500k value'
-    - 'earning 200k+' (with 'income' in query)
+      'over 200k income'
+      'homes over 500k value'
+      'earning 200k+'
     """
     q = query.lower()
 
@@ -321,7 +335,7 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
             elif "value" in q or "home" in q or "homes" in q:
                 min_value = amount
 
-    # also catch "200k+ income" form
+    # "200k+ income"
     m_plus = re.search(r"(\d+(?:\.\d+)?)(k|m)?\s*\+", q)
     if m_plus:
         amount = parse_amount(m_plus)
@@ -335,15 +349,14 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
 
 
 # -------------------------------------------------------------------
-# FEATURE HELPERS
+# VALUE HELPERS (operate on CSV ROWS)
 # -------------------------------------------------------------------
 
-def get_income(props: dict) -> float | None:
+def get_income(row: dict) -> float | None:
     """
-    Try multiple possible ACS income keys. Your cleaner likely left one of:
-      - DP03_0062E (median household income)
-      - MEDHHINC / HHINC
-      - income / median_income / acs_income
+    Try multiple possible ACS income keys.
+    With your pipeline we expect 'median_income', but also support
+    other common names.
     """
     candidate_keys = [
         "income",
@@ -355,8 +368,8 @@ def get_income(props: dict) -> float | None:
         "DP03_0062E",
     ]
     for k in candidate_keys:
-        if k in props:
-            v = props.get(k)
+        if k in row:
+            v = row.get(k)
             if v in (None, "", "-666666666"):
                 continue
             try:
@@ -366,11 +379,10 @@ def get_income(props: dict) -> float | None:
     return None
 
 
-def get_home_value(props: dict) -> float | None:
+def get_home_value(row: dict) -> float | None:
     """
-    Try multiple possible home value keys. Your cleaner likely left one of:
-      - DP04_0089E (median home value)
-      - med_home_value / median_home_value / acs_value
+    Try multiple possible home value keys.
+    With your pipeline we expect 'median_home_value'.
     """
     candidate_keys = [
         "home_value",
@@ -381,8 +393,8 @@ def get_home_value(props: dict) -> float | None:
         "DP04_0089E",
     ]
     for k in candidate_keys:
-        if k in props:
-            v = props.get(k)
+        if k in row:
+            v = row.get(k)
             if v in (None, "", "-666666666"):
                 continue
             try:
@@ -392,39 +404,46 @@ def get_home_value(props: dict) -> float | None:
     return None
 
 
-def extract_basic_fields(props: dict) -> dict:
+def extract_basic_fields(row: dict) -> dict:
     """
-    Extract core address fields *plus* number + street explicitly so
-    we can show all 1–8 columns in the UI.
+    Extract core address fields from a CSV row.
+    The addresses_enriched_acs files use:
+      NUMBER, STREET, CITY, REGION, POSTCODE
     """
 
     def first(*keys):
         for k in keys:
             if not k:
                 continue
-            v = props.get(k)
-            if v not in (None, ""):
-                return v
+            if k in row:
+                v = row.get(k)
+                if v not in (None, ""):
+                    return v
         return None
 
-    # Include "number" for OpenAddresses-style data
     house = first(
+        "NUMBER",
+        "number",
         "house_number",
         "HOUSE_NUM",
         "addr:housenumber",
         "HOUSE",
         "HOUSENUM",
-        "number",
     )
-    street = first("street", "STREET", "addr:street", "ROAD", "RD_NAME")
-    city = first("city", "CITY", "City")
-    state = first("state", "STATE", "ST", "STUSPS", "STATE_NAME", "region")
-    postal = first("zip", "ZIP", "postal_code", "POSTCODE", "ZIPCODE", "ZIP_CODE")
+    street = first("STREET", "street", "addr:street", "ROAD", "RD_NAME")
+    city = first("CITY", "city", "City")
+    # REGION is your 2-letter state code in the addresses CSVs
+    state = first("REGION", "state", "STATE", "ST", "STUSPS", "STATE_NAME")
+    postal = first("POSTCODE", "postal_code", "zip", "ZIP", "ZIPCODE", "ZIP_CODE")
 
     address = first("full_address", "address", "ADDR_FULL")
     if not address:
-        parts = [str(house).strip() if house else None, street]
-        address = " ".join([p for p in parts if p])
+        parts = []
+        if house:
+            parts.append(str(house).strip())
+        if street:
+            parts.append(str(street).strip())
+        address = " ".join(parts) if parts else None
 
     return {
         "address": address,
@@ -475,13 +494,12 @@ NON_RESIDENTIAL_VALUE_HINTS = [
 ]
 
 
-def is_residential(props: dict) -> bool:
+def is_residential(row: dict) -> bool:
     """
-    Heuristic: if we see clear non-residential text, mark as non-res.
-    If we see clear residential text, mark as residential.
-    Otherwise, default to True (better to include than silently drop).
+    Heuristic: look at short string values in the row and try to decide
+    if it's clearly non-res. If ambiguous, default to residential.
     """
-    for key, value in props.items():
+    for _, value in row.items():
         if value is None:
             continue
         if isinstance(value, (int, float)):
@@ -490,12 +508,11 @@ def is_residential(props: dict) -> bool:
         if len(text) > 200:
             continue
 
-        # strong non-res hints
         if any(h in text for h in NON_RESIDENTIAL_VALUE_HINTS):
             if not any(h in text for h in RESIDENTIAL_VALUE_HINTS):
                 return False
 
-    for key, value in props.items():
+    for _, value in row.items():
         if value is None:
             continue
         if isinstance(value, (int, float)):
@@ -510,35 +527,31 @@ def is_residential(props: dict) -> bool:
 
 
 def apply_filters_iter(
-    features: list,
+    rows: list[dict],
     min_income: float | None = None,
     min_value: float | None = None,
     filter_residential: bool = True,
     max_results: int = 20,
-    max_scan: int = 50000,
+    max_scan: int = 50_000,
 ) -> tuple[list[dict], int, int]:
     """
-    Scan features with early break to avoid timeouts on huge counties.
-    Returns (results, total_matches_observed, scanned_count).
-
-    This is used ONLY for the small on-screen preview.
-    The CSV download iterates the full dataset separately.
+    Scan rows with early break to avoid timeouts on huge counties.
+    Returns (results_for_preview, total_matches, scanned_count).
     """
     results: list[dict] = []
     matches = 0
     scanned = 0
 
-    for feat in features:
+    for row in rows:
         scanned += 1
-        props = feat.get("properties", {}) or {}
 
-        if filter_residential and not is_residential(props):
+        if filter_residential and not is_residential(row):
             if scanned >= max_scan and len(results) >= max_results:
                 break
             continue
 
-        inc = get_income(props)
-        val = get_home_value(props)
+        inc = get_income(row)
+        val = get_home_value(row)
 
         if min_income is not None:
             if inc is None or inc < min_income:
@@ -554,7 +567,7 @@ def apply_filters_iter(
 
         matches += 1
         if len(results) < max_results:
-            basic = extract_basic_fields(props)
+            basic = extract_basic_fields(row)
             basic["income"] = inc
             basic["home_value"] = val
             results.append(basic)
@@ -566,13 +579,13 @@ def apply_filters_iter(
 
 
 # -------------------------------------------------------------------
-# S3 LOADING
+# S3 LOADING (ROWS INSTEAD OF GEOJSON FEATURES)
 # -------------------------------------------------------------------
 
-def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict] | tuple[None, None]:
+def load_county_rows(state_code: str, county_norm: str) -> tuple[list[dict] | None, dict | None]:
     """
     Find the S3 key for (state, county) from COUNTY_INDEX and
-    load its features.
+    load its CSV rows into memory for preview.
     """
     state_code = state_code.lower()
     county_norm = county_norm.lower()
@@ -584,7 +597,7 @@ def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict]
 
     meta = state_map.get(county_norm)
 
-    # fuzzy fallback: allow partial matches like "st johns" vs "saint johns"
+    # fuzzy fallback for minor spelling differences
     if not meta:
         for cand_norm, cand_meta in state_map.items():
             if cand_norm == county_norm:
@@ -604,7 +617,6 @@ def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict]
 
     key = meta["key"]
     size = meta["size"]
-
     logging.info(
         "[RESOLVE] Matched state=%s, county=%s, key=%s, size=%d",
         state_code,
@@ -614,11 +626,10 @@ def load_county_features(state_code: str, county_norm: str) -> tuple[list, dict]
     )
 
     obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    body_bytes = obj["Body"].read()
-    data = json.loads(body_bytes)
-
-    feats = data.get("features") or []
-    return feats, meta
+    body = obj["Body"].read().decode("utf-8", errors="replace")
+    reader = csv.DictReader(io.StringIO(body))
+    rows = list(reader)
+    return rows, meta
 
 
 # -------------------------------------------------------------------
@@ -643,6 +654,9 @@ def health():
             "time": int(time.time()),
             "env_aws_id": bool(AWS_ACCESS_KEY_ID),
             "env_openai": bool(os.getenv("OPENAI_API_KEY")),
+            "bucket": S3_BUCKET,
+            "prefix": S3_PREFIX,
+            "indexed_states": len(COUNTY_INDEX),
         }
     )
 
@@ -709,7 +723,7 @@ def search():
             download_available=False,
         )
 
-    # 1) Parse location
+    # 1) Parse location (county + state)
     state_code, county_norm = parse_query_location(query)
     if not state_code or not county_norm:
         logging.info("[RESOLVE] Failed to parse state/county from query.")
@@ -729,9 +743,9 @@ def search():
             download_available=False,
         )
 
-    # 2) Load features from S3 (only counties that succeeded in cleaning exist here)
-    feats, meta = load_county_features(state_code, county_norm)
-    if feats is None or meta is None:
+    # 2) Load rows from S3
+    rows, meta = load_county_rows(state_code, county_norm)
+    if rows is None or meta is None:
         return render_template(
             "index.html",
             query=query,
@@ -741,15 +755,14 @@ def search():
             total=None,
             shown=0,
             error=(
-                f"Couldn't find a cleaned dataset for {county_norm.title()} County, "
-                f"{state_code.upper()}. It may have been skipped or failed during cleaning."
+                f"Couldn't find a dataset for {county_norm.title()} County, "
+                f"{state_code.upper()} in S3."
             ),
             download_available=False,
         )
 
     # 3) Parse filters (income/value)
     min_income, min_value = parse_numeric_filters(query)
-
     q_lower = query.lower()
     filter_residential = (
         ("residential" in q_lower)
@@ -758,15 +771,15 @@ def search():
         or ("house" in q_lower)
     )
 
-    # 4) Apply filters for a small on-screen preview only
+    # 4) Apply filters for preview only
     start = time.time()
     preview_results, matches, scanned = apply_filters_iter(
-        feats,
+        rows,
         min_income=min_income,
         min_value=min_value,
         filter_residential=filter_residential,
         max_results=20,
-        max_scan=50000,
+        max_scan=50_000,
     )
     elapsed = time.time() - start
 
@@ -813,7 +826,7 @@ def download_csv():
     Stream a full CSV of all matching rows for the given query.
     Includes:
       - address, city, state, zip, income, home_value
-      - all original properties as extra columns
+      - all original columns from the county CSV
     """
     if not require_login():
         return redirect(url_for("login"))
@@ -840,8 +853,20 @@ def download_csv():
             download_available=False,
         )
 
-    feats, meta = load_county_features(state_code, county_norm)
-    if feats is None or meta is None:
+    # Resolve S3 key via index
+    state_map = COUNTY_INDEX.get(state_code.lower())
+    meta = None
+    if state_map:
+        meta = state_map.get(county_norm.lower())
+        if not meta:
+            for cand_norm, cand_meta in state_map.items():
+                if cand_norm == county_norm.lower() or \
+                   county_norm.lower() in cand_norm or \
+                   cand_norm in county_norm.lower():
+                    meta = cand_meta
+                    break
+
+    if not meta:
         return render_template(
             "index.html",
             query=query,
@@ -851,13 +876,15 @@ def download_csv():
             total=None,
             shown=0,
             error=(
-                f"Couldn't find a cleaned dataset for {county_norm.title()} County, "
+                f"Couldn't find a dataset for {county_norm.title()} County, "
                 f"{state_code.upper()} for CSV export."
             ),
             download_available=False,
         )
 
-    # Same filter semantics as preview, but no scan limit
+    key = meta["key"]
+
+    # Same filter semantics as preview, but we stream the whole file
     min_income, min_value = parse_numeric_filters(query)
     q_lower = query.lower()
     filter_residential = (
@@ -867,20 +894,16 @@ def download_csv():
         or ("house" in q_lower)
     )
 
-    friendly_cols = ["address", "city", "state", "zip", "income", "home_value"]
-    prop_keys: set[str] = set()
-
-    for feat in feats:
-        props = feat.get("properties", {}) or {}
-        for k in props.keys():
-            if k not in friendly_cols:
-                prop_keys.add(k)
-
-    ordered_prop_keys = sorted(prop_keys)
-    fieldnames = friendly_cols + ordered_prop_keys
-
     def generate_csv_rows():
-        """Yield CSV chunks as bytes/strings for streaming."""
+        obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
+        text_stream = io.TextIOWrapper(obj["Body"], encoding="utf-8")
+        reader = csv.DictReader(text_stream)
+
+        base_keys = reader.fieldnames or []
+        # Friendly columns first
+        friendly = ["address", "city", "state", "zip", "income", "home_value"]
+        fieldnames = friendly + [k for k in base_keys if k not in friendly]
+
         buffer = io.StringIO()
         writer = csv.DictWriter(buffer, fieldnames=fieldnames)
 
@@ -891,15 +914,12 @@ def download_csv():
         buffer.truncate(0)
 
         # rows
-        for feat in feats:
-            props = feat.get("properties", {}) or {}
-
-            # filters
-            if filter_residential and not is_residential(props):
+        for row in reader:
+            if filter_residential and not is_residential(row):
                 continue
 
-            inc = get_income(props)
-            val = get_home_value(props)
+            inc = get_income(row)
+            val = get_home_value(row)
 
             if min_income is not None:
                 if inc is None or inc < min_income:
@@ -909,9 +929,9 @@ def download_csv():
                 if val is None or val < min_value:
                     continue
 
-            basic = extract_basic_fields(props)
+            basic = extract_basic_fields(row)
 
-            row = {
+            out = {
                 "address": (basic.get("address") or "") if basic else "",
                 "city": (basic.get("city") or "") if basic else "",
                 "state": (basic.get("state") or "") if basic else "",
@@ -920,12 +940,12 @@ def download_csv():
                 "home_value": "" if val is None else f"{val:.0f}",
             }
 
-            # add all raw properties
-            for k in ordered_prop_keys:
-                v = props.get(k)
-                row[k] = "" if v is None else str(v)
+            # add all raw CSV columns
+            for k in base_keys:
+                v = row.get(k)
+                out[k] = "" if v is None else str(v)
 
-            writer.writerow(row)
+            writer.writerow(out)
             yield buffer.getvalue()
             buffer.seek(0)
             buffer.truncate(0)
@@ -935,9 +955,10 @@ def download_csv():
     filename = f"{safe_county}_{state_code.lower()}_{ts}.csv"
 
     logging.info(
-        "[DOWNLOAD] Streaming CSV for state=%s county=%s filename=%s",
+        "[DOWNLOAD] Streaming CSV for state=%s county=%s key=%s filename=%s",
         state_code,
         county_norm,
+        key,
         filename,
     )
 
