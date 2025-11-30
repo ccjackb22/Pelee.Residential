@@ -1,164 +1,423 @@
 import os
+import json
+import logging
+import time
+import re
 import csv
 import io
-import logging
+from datetime import datetime
+
 import boto3
+from botocore.config import Config
 from flask import (
-    Flask, render_template, request, redirect, url_for,
-    session, send_file
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    jsonify,
+    Response,
 )
 from dotenv import load_dotenv
-import requests
+import httpx
+
+# -------------------------------------------------------------------
+# ENV + LOGGING
+# -------------------------------------------------------------------
 
 load_dotenv()
 
-# ------------------------------------------------------------
-# CONFIG
-# ------------------------------------------------------------
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
-SECRET_KEY = os.getenv("SECRET_KEY", "default-secret")
-ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-2")
-S3_BUCKET = os.getenv("S3_BUCKET")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-2")
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
+S3_PREFIX = os.getenv("S3_PREFIX", "").strip()
 
-# ------------------------------------------------------------
-# STATE LOOKUP
-# ------------------------------------------------------------
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
 
-STATE_ALIASES = {
-    "alabama": "al", "al": "al",
-    "alaska": "ak", "ak": "ak",
-    "arizona": "az", "az": "az",
-    "arkansas": "ar", "ar": "ar",
-    "california": "ca", "ca": "ca",
-    "colorado": "co", "co": "co",
-    "connecticut": "ct", "ct": "ct",
-    "delaware": "de", "de": "de",
-    "florida": "fl", "fl": "fl",
-    "georgia": "ga", "ga": "ga",
-    "hawaii": "hi", "hi": "hi",
-    "idaho": "id", "id": "id",
-    "illinois": "il", "il": "il",
-    "indiana": "in", "in": "in",
-    "iowa": "ia", "ia": "ia",
-    "kansas": "ks", "ks": "ks",
-    "kentucky": "ky", "ky": "ky",
-    "louisiana": "la", "la": "la",
-    "maine": "me", "me": "me",
-    "maryland": "md", "md": "md",
-    "massachusetts": "ma", "ma": "ma",
-    "michigan": "mi", "mi": "mi",
-    "minnesota": "mn", "mn": "mn",
-    "mississippi": "ms", "ms": "ms",
-    "missouri": "mo", "mo": "mo",
-    "montana": "mt", "mt": "mt",
-    "nebraska": "ne", "ne": "ne",
-    "nevada": "nv", "nv": "nv",
-    "new hampshire": "nh", "nh": "nh",
-    "new jersey": "nj", "nj": "nj",
-    "new mexico": "nm", "nm": "nm",
-    "new york": "ny", "ny": "ny",
-    "north carolina": "nc", "nc": "nc",
-    "north dakota": "nd", "nd": "nd",
-    "ohio": "oh", "oh": "oh",
-    "oklahoma": "ok", "ok": "ok",
-    "oregon": "or", "or": "or",
-    "pennsylvania": "pa", "pa": "pa",
-    "rhode island": "ri", "ri": "ri",
-    "south carolina": "sc", "sc": "sc",
-    "south dakota": "sd", "sd": "sd",
-    "tennessee": "tn", "tn": "tn",
-    "texas": "tx", "tx": "tx",
-    "utah": "ut", "ut": "ut",
-    "vermont": "vt", "vt": "vt",
-    "virginia": "va", "va": "va",
-    "washington": "wa", "wa": "wa",
-    "west virginia": "wv", "wv": "wv",
-    "wisconsin": "wi", "wi": "wi",
-    "wyoming": "wy", "wy": "wy",
-}
-
-# ------------------------------------------------------------
-# AWS CLIENT
-# ------------------------------------------------------------
-
-s3 = boto3.client(
-    "s3",
-    region_name=AWS_DEFAULT_REGION,
-    aws_access_key_id=AWS_ACCESS_KEY_ID,
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-)
-
-# ------------------------------------------------------------
-# RESIDENTIAL DATA INDEXING
-# ------------------------------------------------------------
-
-COUNTY_DATASETS = {}   # ("cuyahoga", "oh") → "path/in/bucket.csv"
-
-def index_s3():
-    """
-    Scan bucket and index all CSVs.
-    """
-    global COUNTY_DATASETS
-    logging.info("[BOOT] Indexing county CSVs...")
-
-    paginator = s3.get_paginator("list_objects_v2")
-    pages = paginator.paginate(Bucket=S3_BUCKET)
-
-    for page in pages:
-        for obj in page.get("Contents", []):
-            key = obj["Key"].lower()
-            if not key.endswith(".csv"):
-                continue
-
-            # Expect format: state/county.csv
-            parts = key.split("/")
-            if len(parts) != 2:
-                continue
-
-            state = parts[0]
-            county_file = parts[1]
-            county = county_file.replace(".csv", "")
-
-            COUNTY_DATASETS[(county, state)] = key
-
-    logging.info(f"[BOOT] Indexed {len(COUNTY_DATASETS)} datasets")
-
-
-# ------------------------------------------------------------
-# FLASK APP
-# ------------------------------------------------------------
+ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD", "Charlotte69")
+SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(24).hex()
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
 
+boto_session = boto3.session.Session(
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION,
+)
+s3 = boto_session.client("s3", config=Config(max_pool_connections=10))
 
-@app.before_first_request
-def startup():
-    index_s3()
+# (state -> county_norm -> metadata)
+COUNTY_INDEX = {}
 
 
-# ------------------------------------------------------------
-# LOGIN
-# ------------------------------------------------------------
+# -------------------------------------------------------------------
+# STATE + COUNTY NORMALIZATION
+# -------------------------------------------------------------------
 
-@app.route("/login", methods=["GET", "POST"])
+STATE_ALIASES = {
+    # abbreviations
+    "al": "al","ak":"ak","az":"az","ar":"ar","ca":"ca","co":"co","ct":"ct","de":"de",
+    "fl":"fl","ga":"ga","hi":"hi","id":"id","il":"il","in":"in","ia":"ia","ks":"ks",
+    "ky":"ky","la":"la","me":"me","md":"md","ma":"ma","mi":"mi","mn":"mn","ms":"ms",
+    "mo":"mo","mt":"mt","ne":"ne","nv":"nv","nh":"nh","nj":"nj","nm":"nm","ny":"ny",
+    "nc":"nc","nd":"nd","oh":"oh","ok":"ok","or":"or","pa":"pa","ri":"ri","sc":"sc",
+    "sd":"sd","tn":"tn","tx":"tx","ut":"ut","vt":"vt","va":"va","wa":"wa","wv":"wv",
+    "wi":"wi","wy":"wy","dc":"dc","pr":"pr",
+
+    # full names
+    "alabama":"al","alaska":"ak","arizona":"az","arkansas":"ar","california":"ca",
+    "colorado":"co","connecticut":"ct","delaware":"de","florida":"fl","georgia":"ga",
+    "hawaii":"hi","idaho":"id","illinois":"il","indiana":"in","iowa":"ia","kansas":"ks",
+    "kentucky":"ky","louisiana":"la","maine":"me","maryland":"md","massachusetts":"ma",
+    "michigan":"mi","minnesota":"mn","mississippi":"ms","missouri":"mo","montana":"mt",
+    "nebraska":"ne","nevada":"nv","new hampshire":"nh","new jersey":"nj","new mexico":"nm",
+    "new york":"ny","north carolina":"nc","north dakota":"nd","ohio":"oh",
+    "oklahoma":"ok","oregon":"or","pennsylvania":"pa","rhode island":"ri",
+    "south carolina":"sc","south dakota":"sd","tennessee":"tn","texas":"tx","utah":"ut",
+    "vermont":"vt","virginia":"va","washington":"wa","west virginia":"wv","wisconsin":"wi",
+    "wyoming":"wy","district of columbia":"dc","puerto rico":"pr",
+}
+
+
+def normalize_state_name(t: str | None):
+    if not t:
+        return None
+    t = t.strip().lower()
+    return STATE_ALIASES.get(t.strip(",. "))
+
+
+def normalize_county_name(name: str | None):
+    if not name:
+        return None
+    n = name.lower().strip()
+    n = n.replace("_", " ")
+    n = re.sub(r"-+", " ", n)
+    for suf in [" county"," parish"," borough"," census area"," municipality"," city"]:
+        if n.endswith(suf):
+            n = n[: -len(suf)]
+            break
+    return n.strip()
+
+
+# -------------------------------------------------------------------
+# BOOT: BUILD INDEX (RUN ON IMPORT)
+# -------------------------------------------------------------------
+
+def build_county_index():
+    """Scan S3 for CSV ≤ county-level."""
+    global COUNTY_INDEX
+    COUNTY_INDEX = {}
+
+    prefix = S3_PREFIX
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+
+    logging.info("[BOOT] Indexing county CSVs...")
+
+    paginator = s3.get_paginator("list_objects_v2")
+    total = 0
+
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if not key.endswith(".csv"):
+                continue
+
+            rel = key[len(prefix):] if prefix else key
+            parts = rel.split("/")
+
+            # Expect state/filename.csv
+            if len(parts) != 2:
+                continue
+
+            st = parts[0].lower()
+            base = parts[1][:-4]  # remove .csv
+
+            county_norm = normalize_county_name(base)
+            if not county_norm:
+                continue
+
+            COUNTY_INDEX.setdefault(st, {})
+            COUNTY_INDEX[st][county_norm] = {
+                "key": key,
+                "size": obj["Size"],
+                "raw_name": base,
+            }
+            total += 1
+
+    logging.info("[BOOT] Indexed %d datasets", total)
+
+
+# build index once on startup
+build_county_index()
+
+
+# -------------------------------------------------------------------
+# QUERY PARSING
+# -------------------------------------------------------------------
+
+def parse_query_location(query: str):
+    q = query.lower().split()
+    county_idx = None
+
+    for i, tok in enumerate(q):
+        if tok in ("county","parish","borough"):
+            county_idx = i
+            break
+    if county_idx is None:
+        return None, None
+
+    # find last "in" before county
+    last_in = None
+    for i in range(county_idx - 1, -1, -1):
+        if q[i] == "in":
+            last_in = i
+            break
+    if last_in is None:
+        return None, None
+
+    county_phrase = " ".join(q[last_in+1:county_idx]).strip()
+    county_norm = normalize_county_name(county_phrase)
+    if not county_norm:
+        return None, None
+
+    # find state after county
+    for t in q[county_idx+1:]:
+        st = normalize_state_name(t)
+        if st:
+            return st, county_norm
+
+    return None, None
+
+
+def parse_numeric_filters(query: str):
+    q = query.lower()
+    min_income = None
+    min_value = None
+
+    m = re.search(r"over\s+(\d+(?:\.\d+)?)(k|m)?", q)
+    if m:
+        num, suf = m.groups()
+        val = float(num)
+        if suf == "k":
+            val *= 1000
+        elif suf == "m":
+            val *= 1_000_000
+
+        if "income" in q:
+            min_income = val
+        elif "value" in q or "home" in q:
+            min_value = val
+
+    return min_income, min_value
+
+
+# -------------------------------------------------------------------
+# RESIDENTIAL HELPERS
+# -------------------------------------------------------------------
+
+def get_income(props):
+    for k in ["income","median_income","acs_income","HHINC","MEDHHINC","DP03_0062E"]:
+        if k in props and props[k] not in (None,"","-666666666"):
+            try:
+                return float(props[k])
+            except:
+                pass
+    return None
+
+
+def get_home_value(props):
+    for k in ["home_value","median_home_value","acs_value","med_home_value","DP04_0089E"]:
+        if k in props and props[k] not in (None,"","-666666666"):
+            try:
+                return float(props[k])
+            except:
+                pass
+    return None
+
+
+def extract_basic_fields(props):
+    def first(*keys):
+        for k in keys:
+            if k in props and props[k]:
+                return props[k]
+        return None
+
+    house = first("house_number","NUMBER","HOUSE","HOUSENUM","number")
+    street = first("street","STREET","addr:street","ROAD","RD_NAME")
+    city = first("city","CITY")
+    state = first("state","STATE","ST")
+    zipc = first("zip","ZIP","postal_code","POSTCODE")
+
+    full = first("full_address","address","ADDR_FULL")
+    if not full:
+        full = " ".join(x for x in [house, street] if x)
+
+    return {
+        "address": full,
+        "number": house,
+        "street": street,
+        "city": city,
+        "state": state,
+        "zip": zipc,
+    }
+
+
+# -------------------------------------------------------------------
+# LOADING RESIDENTIAL DATA
+# -------------------------------------------------------------------
+
+def load_county_rows(state_code, county_norm):
+    st = state_code.lower()
+    county_norm = county_norm.lower()
+
+    if st not in COUNTY_INDEX:
+        return None, None
+
+    # exact match
+    meta = COUNTY_INDEX[st].get(county_norm)
+
+    # fuzzy
+    if not meta:
+        for key, val in COUNTY_INDEX[st].items():
+            if county_norm in key or key in county_norm:
+                meta = val
+                break
+
+    if not meta:
+        return None, None
+
+    key = meta["key"]
+    obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
+    body = obj["Body"]
+    text_stream = io.TextIOWrapper(body, encoding="utf-8")
+    reader = csv.DictReader(text_stream)
+    return reader, meta
+
+
+def apply_filters_iter(row_iter, min_income, min_value, filter_residential):
+    results = []
+    matches = 0
+    scanned = 0
+
+    for props in row_iter:
+        scanned += 1
+
+        inc = get_income(props)
+        val = get_home_value(props)
+
+        if min_income and (inc is None or inc < min_income):
+            continue
+        if min_value and (val is None or val < min_value):
+            continue
+
+        matches += 1
+        if len(results) < 20:
+            basic = extract_basic_fields(props)
+            basic["income"] = inc
+            basic["home_value"] = val
+            results.append(basic)
+
+        if scanned >= 50000 and len(results) >= 20:
+            break
+
+    return results, matches, scanned
+
+
+# -------------------------------------------------------------------
+# COMMERCIAL SEARCH (Google Places)
+# -------------------------------------------------------------------
+
+def run_commercial_search(query: str):
+    if not GOOGLE_MAPS_API_KEY:
+        return False, "Google Maps API key missing.", []
+
+    try:
+        resp = httpx.get(
+            "https://maps.googleapis.com/maps/api/place/textsearch/json",
+            params={"query":query, "key":GOOGLE_MAPS_API_KEY},
+            timeout=15,
+        )
+        data = resp.json()
+        status = data.get("status")
+        if status not in ("OK","ZERO_RESULTS"):
+            return False, f"Places API status: {status}", []
+
+        out = []
+        for item in data.get("results", [])[:20]:
+            name = item.get("name","")
+            addr = item.get("formatted_address","")
+            pid = item.get("place_id")
+            phone = "N/A"
+            website = "N/A"
+            hours = ""
+
+            if pid:
+                det = httpx.get(
+                    "https://maps.googleapis.com/maps/api/place/details/json",
+                    params={
+                        "place_id":pid,
+                        "fields":"international_phone_number,website,opening_hours",
+                        "key":GOOGLE_MAPS_API_KEY
+                    },
+                    timeout=15,
+                ).json().get("result",{})
+
+                phone = det.get("international_phone_number") or "N/A"
+                website = det.get("website") or "N/A"
+                weekday = det.get("opening_hours",{}).get("weekday_text")
+                if weekday:
+                    hours = "; ".join(weekday)
+
+            out.append({
+                "Name":name,
+                "Address":addr,
+                "Phone":phone,
+                "Website":website,
+                "Hours":hours,
+            })
+
+        return True, None, out
+
+    except Exception as e:
+        logging.exception("Commercial search error")
+        return False, str(e), []
+
+
+# -------------------------------------------------------------------
+# AUTH HELPERS
+# -------------------------------------------------------------------
+
+def require_login():
+    return bool(session.get("authenticated"))
+
+
+# -------------------------------------------------------------------
+# ROUTES
+# -------------------------------------------------------------------
+
+@app.route("/health")
+def health():
+    return jsonify({"ok":True})
+
+
+@app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method == "GET":
-        return render_template("login.html")
-
-    password = request.form.get("password", "")
-    if password == ACCESS_PASSWORD:
-        session["authed"] = True
-        return redirect(url_for("index"))
-    return render_template("login.html", error="Incorrect password.")
+    if request.method == "POST":
+        if request.form.get("password","") == ACCESS_PASSWORD:
+            session["authenticated"] = True
+            return redirect(url_for("index"))
+        return render_template("login.html", error="Incorrect password.")
+    return render_template("login.html")
 
 
 @app.route("/logout")
@@ -167,169 +426,184 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ------------------------------------------------------------
-# HOME PAGE
-# ------------------------------------------------------------
-
 @app.route("/")
 def index():
-    if not session.get("authed"):
+    if not require_login():
         return redirect(url_for("login"))
 
-    mode = request.args.get("mode", "residential")
-    return render_template("index.html", mode=mode)
+    mode = request.args.get("mode","residential")
+    if mode not in ("residential","commercial"):
+        mode = "residential"
 
+    return render_template(
+        "index.html",
+        mode=mode,
+        query="",
+        results=[],
+        commercial_results=[],
+        commercial_error=None,
+        location=None,
+        total=None,
+        shown=0,
+        error=None,
+        download_available=False,
+    )
 
-# ------------------------------------------------------------
-# SEARCH ENDPOINT
-# ------------------------------------------------------------
 
 @app.route("/search", methods=["POST"])
 def search():
-    if not session.get("authed"):
+    if not require_login():
         return redirect(url_for("login"))
 
-    mode = request.form.get("mode", "residential").lower()
-    query = request.form.get("query", "").strip()
+    mode = request.form.get("mode","residential")
+    query = (request.form.get("query") or "").strip()
 
-    logging.info(f"[SEARCH] mode={mode} query='{query}'")
+    logging.info("[SEARCH] mode=%s query='%s'", mode, query)
 
-    # -------------------------
-    # COMMERCIAL SEARCH (Google)
-    # -------------------------
     if mode == "commercial":
-        url = (
-            "https://maps.googleapis.com/maps/api/place/textsearch/json"
-            f"?query={query}&key={GOOGLE_API_KEY}"
-        )
-
-        resp = requests.get(url).json()
-        results = []
-
-        if "results" in resp:
-            for place in resp["results"]:
-                place_id = place["place_id"]
-                details_url = (
-                    "https://maps.googleapis.com/maps/api/place/details/json"
-                    f"?place_id={place_id}&fields=international_phone_number,website,opening_hours&key={GOOGLE_API_KEY}"
-                )
-                d = requests.get(details_url).json()
-
-                phone = d.get("result", {}).get("international_phone_number", "N/A")
-                website = d.get("result", {}).get("website", "N/A")
-                hours = d.get("result", {}).get("opening_hours", {}).get("weekday_text", [])
-                hours_str = "; ".join(hours) if hours else "N/A"
-
-                results.append({
-                    "Name": place.get("name", "N/A"),
-                    "Address": place.get("formatted_address", "N/A"),
-                    "Phone": phone,
-                    "Website": website,
-                    "Hours": hours_str,
-                })
-
+        ok, err, results = run_commercial_search(query)
         return render_template(
             "index.html",
             mode="commercial",
             query=query,
             commercial_results=results,
+            commercial_error=err,
+            results=[],
+            error=None,
+            location=None,
+            total=None,
+            shown=0,
+            download_available=False,
         )
 
-    # -------------------------
-    # RESIDENTIAL SEARCH (AWS CSV)
-    # -------------------------
+    # Residential
+    if not query:
+        return render_template(
+            "index.html",
+            mode="residential",
+            query="",
+            results=[],
+            error="Please enter a search query with a county and state.",
+            commercial_results=[],
+            commercial_error=None,
+            location=None,
+            total=None,
+            shown=0,
+            download_available=False,
+        )
 
-    words = query.lower().split()
-    if "county" not in words:
+    st, county = parse_query_location(query)
+    if not st or not county:
         return render_template(
             "index.html",
             mode="residential",
             query=query,
-            error="Couldn't resolve a county. Include BOTH the county name and 'County' and the full state name."
+            results=[],
+            error=(
+                "Couldn't resolve a (county, state). Use: "
+                "'residential addresses in Cuyahoga County Ohio'."
+            ),
+            commercial_results=[],
+            commercial_error=None,
+            location=None,
+            total=None,
+            shown=0,
+            download_available=False,
         )
 
-    # Extract county name
-    try:
-        idx = words.index("county")
-        county = words[idx - 1]
-    except:
+    row_iter, meta = load_county_rows(st, county)
+    if not row_iter:
         return render_template(
             "index.html",
             mode="residential",
             query=query,
-            error="Couldn't parse the county name."
+            results=[],
+            error=f"No dataset found for {county.title()} County, {st.upper()}",
+            commercial_results=[],
+            commercial_error=None,
+            location=None,
+            total=None,
+            shown=0,
+            download_available=False,
         )
 
-    # Extract last word as state name
-    state_full = words[-1]
-    if state_full not in STATE_ALIASES:
-        return render_template(
-            "index.html",
-            mode="residential",
-            query=query,
-            error="Couldn't parse state name."
-        )
+    min_income, min_value = parse_numeric_filters(query)
 
-    state = STATE_ALIASES[state_full]
-
-    key = COUNTY_DATASETS.get((county, state))
-    if not key:
-        return render_template(
-            "index.html",
-            mode="residential",
-            query=query,
-            error="County dataset not found."
-        )
-
-    obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    csv_bytes = obj["Body"].read().decode("utf-8", errors="ignore")
-    reader = csv.DictReader(io.StringIO(csv_bytes))
-
-    results = list(reader)
-    shown = results[:20]
-    total = len(results)
+    preview, matches, scanned = apply_filters_iter(
+        row_iter,
+        min_income=min_income,
+        min_value=min_value,
+        filter_residential=True
+    )
 
     return render_template(
         "index.html",
         mode="residential",
         query=query,
-        results=shown,
-        shown=len(shown),
-        total=total,
-        location=f"{county.title()} County, {state.upper()}",
-        download_available=True,
+        results=preview,
+        total=matches,
+        shown=len(preview),
+        location=f"{county.title()} County, {st.upper()}",
+        error=None if matches else "No matching results.",
+        commercial_results=[],
+        commercial_error=None,
+        download_available=bool(preview),
     )
 
 
-# ------------------------------------------------------------
-# CSV EXPORT
-# ------------------------------------------------------------
-
-@app.route("/download_csv", methods=["POST"])
+@app.route("/download", methods=["POST"])
 def download_csv():
-    if not session.get("authed"):
+    if not require_login():
         return redirect(url_for("login"))
 
-    query = request.form.get("query", "")
-    words = query.lower().split()
-    idx = words.index("county")
-    county = words[idx - 1]
-    state = STATE_ALIASES[words[-1]]
+    query = (request.form.get("query") or "").strip()
+    st, county = parse_query_location(query)
 
-    key = COUNTY_DATASETS[(county, state)]
-    obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
+    row_iter, meta = load_county_rows(st, county)
+    if not row_iter:
+        return "Dataset missing", 400
 
-    return send_file(
-        io.BytesIO(obj["Body"].read()),
+    min_income, min_value = parse_numeric_filters(query)
+
+    # cache rows
+    cache = list(row_iter)
+
+    fieldnames = set()
+    for r in cache:
+        fieldnames.update(r.keys())
+
+    fieldnames = list(fieldnames)
+
+    def generate():
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+        writer.writeheader()
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        for props in cache:
+            inc = get_income(props)
+            val = get_home_value(props)
+
+            if min_income and (inc is None or inc < min_income):
+                continue
+            if min_value and (val is None or val < min_value):
+                continue
+
+            writer.writerow(props)
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    fname = f"{county}_{st}_{int(time.time())}.csv"
+
+    return Response(
+        generate(),
         mimetype="text/csv",
-        download_name=f"{county}_{state}.csv",
-        as_attachment=True,
+        headers={"Content-Disposition":f'attachment; filename="{fname}"'}
     )
 
 
-# ------------------------------------------------------------
-# RUN
-# ------------------------------------------------------------
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
