@@ -3,307 +3,103 @@
 <head>
     <meta charset="UTF-8">
     <title>PELÉE AI | Login</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
         :root {
             --bg: #020617;
             --accent: #38bdf8;
-            --accent2: #22c55e;
-            --card: rgba(15,23,42,0.96);
-            --border: rgba(148,163,184,0.5);
             --text: #e5e7eb;
             --muted: #94a3b8;
+            --card: rgba(15,23,42,0.96);
+            --border: rgba(148,163,184,0.4);
         }
-
-        * { box-sizing: border-box; }
-
         body {
             margin: 0;
             min-height: 100vh;
             background: radial-gradient(circle at top, #1e293b 0%, #020617 55%, #000 100%);
-            color: var(--text);
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            font-family: Inter, system-ui, sans-serif;
             display: flex;
             justify-content: center;
-            padding: 48px 16px;
-        }
-
-        .shell {
-            width: 100%;
-            max-width: 960px;
-            background: linear-gradient(to bottom right, rgba(30,41,59,0.25), rgba(2,6,23,0.98));
-            border-radius: 24px;
-            padding: 32px 32px 28px;
-            border: 1px solid var(--border);
-            box-shadow: 0 32px 90px rgba(0,0,0,0.75);
-        }
-
-        .top-row {
-            display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-        }
-
-        .logo-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .logo-img {
-            height: 28px;
-            width: auto;
-            object-fit: contain;
-            border-radius: 999px;
-            box-shadow:
-                0 0 12px rgba(56,189,248,0.8),
-                0 0 24px rgba(56,189,248,0.4);
-        }
-
-        .logo {
-            font-size: 22px;
-            font-weight: 700;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-        }
-
-        .logo span { color: var(--accent); }
-
-        .pill-small {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.14em;
-            padding: 4px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.6);
-            color: var(--muted);
-            background: rgba(15,23,42,0.9);
-        }
-
-        .cta-btn {
-            margin-top: 14px;
-            display: inline-block;
-            padding: 10px 18px;
-            font-size: 12px;
-            letter-spacing: 0.10em;
-            font-weight: 600;
-            text-transform: uppercase;
-            border-radius: 999px;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
-            color: #020617;
-            text-decoration: none;
-        }
-
-        .main-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-            gap: 32px;
-            align-items: center;
-        }
-
-        @media (max-width: 800px) {
-            .main-grid { grid-template-columns: 1fr; }
-        }
-
-        .hero-title {
-            font-size: 26px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-        }
-
-        .hero-sub {
-            margin-top: 8px;
-            font-size: 14px;
-            color: var(--muted);
-        }
-
-        .stat-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .stat-pill {
-            border-radius: 999px;
-            padding: 7px 12px;
-            border: 1px solid rgba(148,163,184,0.4);
-            background: rgba(15,23,42,0.9);
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .stat-pill strong {
-            color: var(--accent);
-            font-weight: 600;
-        }
-
-        .examples {
-            margin-top: 22px;
-        }
-
-        .examples-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.14em;
-            color: var(--muted);
-            margin-bottom: 8px;
-        }
-
-        .example-chip-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .example-chip {
-            font-size: 11px;
-            border-radius: 999px;
-            padding: 6px 10px;
-            border: 1px solid rgba(51,65,85,0.9);
-            background: rgba(15,23,42,0.95);
-            color: #cbd5f5;
-        }
-
-        .login-card {
-            background: var(--card);
-            border-radius: 18px;
-            padding: 22px 20px 18px;
-            border: 1px solid var(--border);
-            box-shadow: 0 22px 70px rgba(0,0,0,0.75);
-        }
-
-        .login-title {
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-            color: var(--muted);
-            margin-bottom: 12px;
-        }
-
-        label {
-            font-size: 13px;
-            display: block;
-            margin-bottom: 6px;
-        }
-
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(148,163,184,0.7);
-            background: #020617;
             color: var(--text);
-            font-size: 14px;
-            outline: none;
-            margin-bottom: 10px;
         }
-
-        input::placeholder { color: #64748b; }
-
-        .btn {
+        .box {
             width: 100%;
+            max-width: 380px;
+            background: var(--card);
+            padding: 32px;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            box-shadow: 0 26px 90px rgba(0,0,0,0.75);
+            text-align: center;
+        }
+        .logo-img {
+            width: 48px;
+            border-radius: 999px;
+            margin-bottom: 10px;
+            box-shadow:
+                0 0 14px rgba(56,189,248,0.8),
+                0 0 26px rgba(56,189,248,0.35);
+        }
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+        }
+        h1 span { color: var(--accent); }
+        .sub {
             margin-top: 6px;
-            padding: 10px 0;
+            font-size: 13px;
+            color: var(--muted);
+        }
+        input {
+            margin-top: 24px;
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #0b1221;
+            color: var(--text);
+            font-size: 15px;
+        }
+        button {
+            margin-top: 18px;
+            width: 100%;
+            padding: 14px;
             border-radius: 999px;
             border: none;
-            cursor: pointer;
             font-size: 13px;
             font-weight: 600;
-            letter-spacing: 0.13em;
-            text-transform: uppercase;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
             color: #020617;
+            background: linear-gradient(90deg, #38bdf8, #22c55e);
+            cursor: pointer;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
         }
-
-        .btn:hover { filter: brightness(1.05); }
-
-        .error {
-            margin-top: 10px;
-            font-size: 12px;
+        .err {
+            margin-top: 14px;
+            font-size: 13px;
             color: #fecaca;
-            background: rgba(127,29,29,0.9);
-            border-radius: 10px;
-            padding: 8px 10px;
-            border: 1px solid rgba(248,113,113,0.8);
-        }
-
-        .footnote {
-            margin-top: 16px;
-            font-size: 11px;
-            color: var(--muted);
         }
     </style>
 </head>
 
 <body>
-<div class="shell">
+<div class="box">
+    <img src="{{ url_for('static', filename='3.png') }}" class="logo-img">
 
-    <div class="top-row">
-        <div class="logo-group">
-            <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
-            <div class="logo"><span>PELÉE</span> AI</div>
-        </div>
-        <div class="pill-small">Enterprise Access</div>
-    </div>
+    <h1><span>PELÉE</span> AI</h1>
+    <div class="sub">Internal Access Only</div>
 
-    <div class="main-grid">
-
-        <!-- LEFT: Product Pitch -->
-        <div>
-            <div class="hero-title">The fastest way to pull clean, enriched U.S. residential data at county scale.</div>
-            <div class="hero-sub">
-                3,143 counties • 150M+ parcels • Income + home value enriched<br>
-                Search in plain English → export filtered CSVs instantly
-            </div>
-
-            <a href="mailto:sales@pelee.ai" class="cta-btn">Request Enterprise Access</a>
-
-            <div class="stat-row">
-                <div class="stat-pill"><strong>150M+</strong> enriched parcels</div>
-                <div class="stat-pill"><strong>Nationwide</strong> coverage</div>
-                <div class="stat-pill"><strong>Instant CSV</strong> export</div>
-            </div>
-
-            <div class="examples">
-                <div class="examples-label">Example queries</div>
-                <div class="example-chip-row">
-                    <div class="example-chip">"$1M–$3M homes in Santa Clara County"</div>
-                    <div class="example-chip">"4+ bed SFRs in Palo Alto built after 2015"</div>
-                    <div class="example-chip">"Households earning $250k+ near Mountain View"</div>
-                </div>
-            </div>
-
-            <div class="footnote" style="margin-top: 20px; text-align:left;">
-                Enterprise console — access required<br>
-                Contact: <strong>sales@pelee.ai</strong>
-            </div>
-        </div>
-
-        <!-- RIGHT: Login -->
-        <div class="login-card">
-            <div class="login-title">Enterprise Login</div>
-
-            <form method="POST">
-                <label for="username">Username</label>
-                <input id="username" name="username" type="text" placeholder="Enter username">
-
-                <label for="password">Password</label>
-                <input id="password" name="password" type="password" placeholder="Enter password">
-
-                <button class="btn" type="submit">Enter</button>
-
-                {% if error %}
-                <div class="error">{{ error }}</div>
-                {% endif %}
-            </form>
-
-        </div>
-    </div>
-
+    <form method="POST" action="/login">
+        <input type="password" name="password" placeholder="Password" required />
+        <button type="submit">Login</button>
+        {% if error %}
+            <div class="err">{{ error }}</div>
+        {% endif %}
+    </form>
 </div>
 </body>
 </html>
