@@ -1,19 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>PELÉE AI | Data Console</title>
+    <meta charset="UTF-8" />
+    <title>PELÉE AI | Address Search</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <style>
         :root {
             --bg: #020617;
+            --bg-elevated: #020617;
+            --card: #020617;
             --accent: #38bdf8;
-            --accent2: #22c55e;
-            --card: rgba(15,23,42,0.96);
-            --border: rgba(148,163,184,0.5);
-            --text: #e5e7eb;
-            --muted: #94a3b8;
+            --accent-soft: rgba(56, 189, 248, 0.15);
+            --border-subtle: rgba(148, 163, 184, 0.6);
+            --text-main: #e5e7eb;
+            --text-muted: #9ca3af;
+            --danger: #fecaca;
         }
 
         * { box-sizing: border-box; }
@@ -21,240 +23,335 @@
         body {
             margin: 0;
             min-height: 100vh;
-            background: radial-gradient(circle at top, #1e293b 0%, #020617 55%, #000 100%);
-            color: var(--text);
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+            color: var(--text-main);
             display: flex;
             justify-content: center;
-            padding: 48px 16px;
+            padding: 32px 16px;
         }
 
         .shell {
             width: 100%;
-            max-width: 1100px;
-            background: linear-gradient(to bottom right, rgba(30,41,59,0.25), rgba(2,6,23,0.98));
-            border-radius: 24px;
-            padding: 32px 32px 28px;
-            border: 1px solid var(--border);
-            box-shadow: 0 32px 90px rgba(0,0,0,0.75);
+            max-width: 1040px;
+            background:
+                radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 55%),
+                radial-gradient(circle at top right, rgba(34,197,94,0.05), transparent 55%),
+                rgba(15,23,42,0.98);
+            border-radius: 20px;
+            padding: 22px 22px 20px;
+            border: 1px solid rgba(148,163,184,0.5);
+            box-shadow: 0 24px 80px rgba(15,23,42,0.85);
         }
 
-        .top-row {
+        header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
+            gap: 16px;
+            margin-bottom: 18px;
         }
 
-        .logo-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .logo-img {
-            height: 28px;
-            width: auto;
-            object-fit: contain;
-            border-radius: 999px;
-            box-shadow:
-                0 0 12px rgba(56,189,248,0.8),
-                0 0 24px rgba(56,189,248,0.4);
-        }
+        .brand-block { display: flex; flex-direction: column; gap: 4px; }
 
         .logo {
-            font-size: 22px;
             font-weight: 700;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
+            font-size: 20px;
+            letter-spacing: 0.16em;
         }
 
         .logo span { color: var(--accent); }
 
-        .pill-small {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.14em;
-            padding: 4px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.6);
-            color: var(--muted);
-            background: rgba(15,23,42,0.9);
+        .tagline {
+            font-size: 13px;
+            color: var(--text-muted);
         }
 
+        .user-actions { display: flex; align-items: center; gap: 8px; }
+
+        .btn-ghost {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.6);
+            padding: 6px 12px;
+            background: rgba(15,23,42,0.85);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .btn-ghost:hover {
+            border-color: rgba(148,163,184,1);
+            color: #e5e7eb;
+        }
+
+        main { display: flex; flex-direction: column; gap: 16px; }
+
+        .panel {
+            border-radius: 16px;
+            border: 1px solid rgba(51,65,85,0.95);
+            background: rgba(15,23,42,0.96);
+            padding: 14px 14px 12px;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+        }
+
+        .panel-title {
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        .pill {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 999px;
+            padding: 4px 10px;
+            border: 1px solid rgba(56,189,248,0.7);
+            color: var(--accent);
+            background: rgba(15,23,42,0.85);
+        }
+
+        /* ==== TOGGLE ==== */
         .mode-toggle {
             display: flex;
-            gap: 10px;
-            margin-bottom: 16px;
+            gap: 8px;
+            margin-bottom: 10px;
         }
 
         .toggle-btn {
-            padding: 8px 14px;
-            border-radius: 999px;
-            border: 1px solid var(--border);
-            background: rgba(15,23,42,0.9);
-            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(148,163,184,0.5);
+            background: rgba(15,23,42,0.8);
+            font-size: 12px;
             cursor: pointer;
-            color: var(--muted);
+            color: var(--text-muted);
         }
 
         .toggle-btn.active {
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            background: linear-gradient(90deg, #0ea5e9, #22c55e);
             color: #020617;
-            border-color: transparent;
             font-weight: 600;
+            border-color: transparent;
         }
 
-        .search-box {
-            margin-bottom: 14px;
+        .search-row { display: flex; flex-direction: column; gap: 10px; }
+
+        @media (min-width: 720px) {
+            .search-row {
+                flex-direction: row;
+                align-items: center;
+            }
         }
 
-        #query {
+        .search-input-wrap { flex: 1; position: relative; }
+
+        .search-input {
             width: 100%;
-            padding: 12px;
-            font-size: 15px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            background: #020617;
-            color: var(--text);
+            padding: 10px 11px 10px 32px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.7);
+            background: radial-gradient(circle at top left, rgba(15,23,42,0.95), #020617);
+            color: var(--text-main);
+            font-size: 14px;
             outline: none;
         }
 
-        .search-btn {
-            margin-top: 8px;
-            padding: 10px 16px;
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .btn-primary {
             border-radius: 999px;
             border: none;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
-            color: #020617;
-            font-size: 13px;
+            padding: 10px 18px;
+            font-size: 12px;
             font-weight: 600;
-            cursor: pointer;
-        }
-
-        .examples-label {
-            font-size: 11px;
-            color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.12em;
-            margin-bottom: 6px;
+            cursor: pointer;
+            background: linear-gradient(90deg, #0ea5e9, #22c55e);
+            color: #020617;
+            white-space: nowrap;
         }
 
-        .example-chip-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
+        .btn-primary:hover { filter: brightness(1.05); }
+
+        .examples-label {
+            margin-top: 10px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--text-muted);
         }
+
+        .example-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
 
         .example-chip {
             font-size: 11px;
-            padding: 6px 10px;
             border-radius: 999px;
-            border: 1px solid rgba(51,65,85,0.9);
+            padding: 6px 10px;
+            border: 1px solid rgba(51,65,85,0.95);
             background: rgba(15,23,42,0.95);
             color: #cbd5f5;
             cursor: pointer;
         }
 
         .error {
-            margin-top: 12px;
-            padding: 10px;
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--danger);
             background: rgba(127,29,29,0.9);
             border-radius: 10px;
-            border: 1px solid rgba(248,113,113,0.8);
-            color: #fecaca;
-            font-size: 13px;
+            padding: 8px 10px;
+            border: 1px solid rgba(248,113,113,0.85);
             display: none;
         }
 
-        table {
+        .results-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 18px;
+            margin-top: 12px;
+        }
+
+        .results-table th,
+        .results-table td {
+            border: 1px solid rgba(30,64,175,0.65);
+            padding: 8px;
+            font-size: 12px;
+        }
+
+        .results-table th {
+            color: var(--accent);
+            background: rgba(15,23,42,0.9);
+        }
+
+        .download-form {
+            margin-top: 10px;
             display: none;
         }
 
-        th, td {
-            border: 1px solid #30363d;
-            padding: 10px;
-            text-align: left;
-            font-size: 13px;
-        }
-
-        th {
-            background-color: rgba(15,23,42,0.9);
-            color: var(--accent);
-        }
-
-        .download-btn {
-            margin-top: 14px;
-            padding: 10px 16px;
+        .btn-secondary {
+            padding: 7px 12px;
             border-radius: 999px;
-            border: none;
-            background: linear-gradient(90deg, var(--accent), var(--accent2));
-            color: #020617;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
+            font-size: 11px;
             text-transform: uppercase;
+            letter-spacing: .12em;
+            background: rgba(15,23,42,0.9);
+            border: 1px solid rgba(148,163,184,0.9);
+            color: var(--text-muted);
+            cursor: pointer;
         }
     </style>
 </head>
+
 <body>
 <div class="shell">
 
-    <div class="top-row">
-        <div class="logo-group">
-            <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
+    <!-- Header -->
+    <header>
+        <div class="brand-block">
             <div class="logo"><span>PELÉE</span> AI</div>
+            <div class="tagline">Internal data tool · residential + commercial address discovery</div>
         </div>
-        <div class="pill-small">Data Console</div>
-    </div>
+        <div class="user-actions">
+            <form action="{{ url_for('logout') }}" method="GET">
+                <button type="submit" class="btn-ghost">Logout</button>
+            </form>
+        </div>
+    </header>
 
-    <div class="mode-toggle">
-        <button class="toggle-btn active" id="btn-residential">Residential</button>
-        <button class="toggle-btn" id="btn-commercial">Commercial</button>
-    </div>
+    <main>
 
-    <div class="search-box">
-        <input id="query" placeholder="Enter your search (e.g. McDonalds in Cleveland Ohio)" />
-        <button class="search-btn" id="search-btn">Search</button>
-    </div>
+        <!-- SEARCH PANEL -->
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Simple natural-language search</div>
+                <div class="pill">Instant CSV export</div>
+            </div>
 
-    <div class="examples-label">Examples:</div>
-    <div class="example-chip-row" id="examples-container"></div>
+            <!-- TOGGLE -->
+            <div class="mode-toggle">
+                <div id="btn-residential" class="toggle-btn active">Residential</div>
+                <div id="btn-commercial" class="toggle-btn">Commercial</div>
+            </div>
 
-    <div class="error" id="error-box"></div>
+            <!-- SEARCH -->
+            <div class="search-row">
+                <div class="search-input-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input
+                        id="query"
+                        class="search-input"
+                        type="text"
+                        placeholder="residential addresses in Cuyahoga County Ohio"
+                        autocomplete="off"
+                    />
+                </div>
+                <button id="search-btn" class="btn-primary">Search</button>
+            </div>
 
-    <!-- Residential Results -->
-    <table id="residential-table">
-        <thead>
-            <tr>
-                <th>Address</th><th>City</th><th>State</th><th>ZIP</th><th>Income</th><th>Home Value</th>
-            </tr>
-        </thead>
-        <tbody id="residential-body"></tbody>
-    </table>
+            <div class="examples-label">Examples</div>
+            <div id="examples-container" class="example-chip-row"></div>
 
-    <!-- Commercial Results -->
-    <table id="commercial-table">
-        <thead>
-            <tr>
-                <th>Name</th><th>Address</th><th>Phone</th><th>Website</th><th>Hours</th>
-            </tr>
-        </thead>
-        <tbody id="commercial-body"></tbody>
-    </table>
+            <div id="error-box" class="error"></div>
 
-    <form id="download-form" method="POST" action="/download" style="display:none;">
-        <input type="hidden" name="query" id="download-query">
-        <button type="submit" class="download-btn" id="download-btn">Download CSV</button>
-    </form>
+            <!-- RESIDENTIAL TABLE -->
+            <table id="residential-table" class="results-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>City</th>
+                        <th>State</th>
+                        <th>ZIP</th>
+                        <th>Income</th>
+                        <th>Home Value</th>
+                    </tr>
+                </thead>
+                <tbody id="residential-body"></tbody>
+            </table>
 
+            <!-- COMMERCIAL TABLE -->
+            <table id="commercial-table" class="results-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>Phone</th>
+                        <th>Website</th>
+                        <th>Hours</th>
+                    </tr>
+                </thead>
+                <tbody id="commercial-body"></tbody>
+            </table>
+
+            <!-- CSV DOWNLOAD -->
+            <form id="download-form" class="download-form" method="POST" action="/download">
+                <input id="download-query" type="hidden" name="query">
+                <button type="submit" class="btn-secondary">⬇️ Download full CSV</button>
+            </form>
+
+        </section>
+    </main>
 </div>
 
+<!-- Scripts -->
 <script>
-// ----- Toggle + Example Setup ----- //
 const btnRes = document.getElementById("btn-residential");
 const btnCom = document.getElementById("btn-commercial");
 const queryInput = document.getElementById("query");
@@ -268,15 +365,14 @@ const comBody = document.getElementById("commercial-body");
 
 const downloadForm = document.getElementById("download-form");
 const downloadQuery = document.getElementById("download-query");
-const downloadBtn = document.getElementById("download-btn");
 
 let MODE = "residential";
 
 const EXAMPLES = {
     residential: [
-        "McDonalds in Cleveland Ohio",
-        "Starbucks near Mountain View CA",
-        "Pharmacies in Sunnyvale"
+        "residential addresses in Cuyahoga County Ohio",
+        "homes in Brevard County Florida",
+        "addresses in Fulton County GA"
     ],
     commercial: [
         "Pharmacies in Palo Alto",
@@ -291,9 +387,7 @@ function updateExamples() {
         const chip = document.createElement("div");
         chip.className = "example-chip";
         chip.innerText = `"${txt}"`;
-        chip.onclick = () => {
-            queryInput.value = txt;
-        };
+        chip.onclick = () => { queryInput.value = txt; };
         examplesContainer.appendChild(chip);
     });
 }
@@ -305,7 +399,6 @@ btnRes.onclick = () => {
     resTable.style.display = "none";
     comTable.style.display = "none";
     downloadForm.style.display = "none";
-    errorBox.style.display = "none";
     updateExamples();
 };
 
@@ -316,13 +409,13 @@ btnCom.onclick = () => {
     resTable.style.display = "none";
     comTable.style.display = "none";
     downloadForm.style.display = "none";
-    errorBox.style.display = "none";
     updateExamples();
 };
 
 updateExamples();
 
 document.getElementById("search-btn").onclick = runSearch;
+
 queryInput.addEventListener("keypress", e => {
     if (e.key === "Enter") {
         e.preventDefault();
@@ -337,26 +430,32 @@ async function runSearch() {
     downloadForm.style.display = "none";
 
     const q = queryInput.value.trim();
-    if (!q) return (errorBox.innerText = "Please enter a search.", errorBox.style.display = "block");
+    if (!q) {
+        errorBox.innerText = "Please enter a search.";
+        errorBox.style.display = "block";
+        return;
+    }
 
     if (MODE === "residential") {
-        await searchResidential(q);
+        return searchResidential(q);
     } else {
-        await searchCommercial(q);
+        return searchCommercial(q);
     }
 }
 
 async function searchResidential(q) {
     try {
+        const formData = new FormData();
+        formData.append("query", q);
+
         const resp = await fetch("/search", {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({query: q})
+            body: formData
         });
+
         const data = await resp.json();
-        if (!data.ok) {
-            throw new Error(data.error || "No results.");
-        }
+        if (!data.ok) throw new Error(data.error || "No results.");
+
         resBody.innerHTML = "";
         data.results.forEach(r => {
             const tr = document.createElement("tr");
@@ -370,9 +469,11 @@ async function searchResidential(q) {
             `;
             resBody.appendChild(tr);
         });
+
         resTable.style.display = "table";
         downloadQuery.value = q;
         downloadForm.style.display = "block";
+
     } catch (err) {
         errorBox.innerText = err.message;
         errorBox.style.display = "block";
@@ -383,13 +484,13 @@ async function searchCommercial(q) {
     try {
         const resp = await fetch("/commercial_search", {
             method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({query: q})
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: q })
         });
+
         const data = await resp.json();
-        if (!data.ok) {
-            throw new Error(data.error || "No results.");
-        }
+        if (!data.ok) throw new Error(data.error || "No results.");
+
         comBody.innerHTML = "";
         data.results.forEach(r => {
             const tr = document.createElement("tr");
@@ -397,17 +498,20 @@ async function searchCommercial(q) {
                 <td>${r.Name || ""}</td>
                 <td>${r.Address || ""}</td>
                 <td>${r.Phone || ""}</td>
-                <td>${r.Website && r.Website !== "N/A" ? `<a href="${r.Website}" target="_blank">Website</a>` : "N/A"}</td>
+                <td>${r.Website ? `<a href="${r.Website}" target="_blank">Website</a>` : "N/A"}</td>
                 <td>${r.Hours || ""}</td>
             `;
             comBody.appendChild(tr);
         });
+
         comTable.style.display = "table";
+
     } catch (err) {
         errorBox.innerText = err.message;
         errorBox.style.display = "block";
     }
 }
 </script>
+
 </body>
 </html>
