@@ -20,6 +20,7 @@ from flask import (
     Response,
 )
 from dotenv import load_dotenv
+import requests  # NEW: for Google Places API
 
 # -------------------------------------------------------------------
 # ENV + LOGGING SETUP
@@ -40,23 +41,14 @@ AWS_REGION = (
     or "us-east-2"
 )
 
-# NEW DATASET LAYOUT (what you just uploaded):
-#
-#   s3://residential-data-jack/<state>/<county>.csv
-#
-# Example:
-#   s3://residential-data-jack/oh/cuyahoga.csv
-#   s3://residential-data-jack/fl/wakulla.csv
-#
-# Each CSV row (from addresses_enriched_acs) looks like:
-#   LON,LAT,NUMBER,STREET,UNIT,CITY,DISTRICT,REGION,POSTCODE,ID,HASH,
-#   GEOID,median_income,median_home_value,median_rent,population,median_age
-#
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
 S3_PREFIX = os.getenv("S3_PREFIX", "").strip()  # IMPORTANT: leave this empty in Render
 
 ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD", "Charlotte69")
 SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(24).hex()
+
+# NEW: Google Places API key (prefer GOOGLE_API_KEY, fall back to GOOGLE_MAPS_API_KEY)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -969,6 +961,121 @@ def download_csv():
             "Content-Disposition": f'attachment; filename="{filename}"'
         },
     )
+
+
+# -------------------------------------------------------------------
+# COMMERCIAL SEARCH (Google Places)
+# -------------------------------------------------------------------
+
+@app.route("/commercial_search", methods=["POST"])
+def commercial_search():
+    """
+    Google Places-backed business search.
+    Expects JSON: { "query": "coffee shops in Palo Alto" }
+
+    Returns JSON:
+      {
+        "preview_count": N,
+        "total_count": M,
+        "preview": [
+          {"Name": ..., "Address": ..., "Phone": ..., "Website": ..., "Hours": ...},
+          ...
+        ]
+      }
+    """
+    if not require_login():
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if not GOOGLE_API_KEY:
+        logging.error("[COMMERCIAL] GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY not configured.")
+        return jsonify({"error": "Google API key not configured on server."}), 500
+
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or request.form.get("query") or "").strip()
+    if not query:
+        return jsonify({"error": "Empty query"}), 400
+
+    logging.info("[COMMERCIAL] Incoming query='%s'", query)
+
+    try:
+        # 1) Text Search
+        params = {
+            "query": query,
+            "key": GOOGLE_API_KEY,
+        }
+        resp = requests.get(
+            "https://maps.googleapis.com/maps/api/place/textsearch/json",
+            params=params,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logging.error("[COMMERCIAL] Text search HTTP %s", resp.status_code)
+            return jsonify({"error": f"Google Places HTTP {resp.status_code}"}), 502
+
+        payload = resp.json()
+        status = payload.get("status")
+        if status not in ("OK", "ZERO_RESULTS"):
+            logging.error("[COMMERCIAL] Places status=%s, error_message=%s",
+                          status, payload.get("error_message"))
+            return jsonify({
+                "error": f"Google Places error: {status} {payload.get('error_message','')}"
+            }), 502
+
+        results = payload.get("results", [])
+        total_count = len(results)
+        preview_places = results[:10]  # keep details calls bounded
+
+        preview = []
+        for place in preview_places:
+            place_id = place.get("place_id")
+            name = place.get("name") or ""
+            address = place.get("formatted_address") or ""
+
+            phone = ""
+            website = ""
+            hours_str = ""
+
+            if place_id:
+                try:
+                    details_params = {
+                        "place_id": place_id,
+                        "fields": "formatted_phone_number,website,opening_hours",
+                        "key": GOOGLE_API_KEY,
+                    }
+                    d_resp = requests.get(
+                        "https://maps.googleapis.com/maps/api/place/details/json",
+                        params=details_params,
+                        timeout=10,
+                    )
+                    if d_resp.status_code == 200:
+                        d_payload = d_resp.json()
+                        d_status = d_payload.get("status")
+                        if d_status == "OK":
+                            result = d_payload.get("result", {})
+                            phone = result.get("formatted_phone_number") or ""
+                            website = result.get("website") or ""
+                            weekday_text = (result.get("opening_hours") or {}).get("weekday_text") or []
+                            hours_str = "; ".join(weekday_text)
+                except Exception as e:
+                    logging.warning("[COMMERCIAL] Details error for place_id=%s: %s", place_id, e)
+
+            preview.append({
+                "Name": name,
+                "Address": address,
+                "Phone": phone or "N/A",
+                "Website": website or "N/A",
+                "Hours": hours_str or "",
+            })
+
+        return jsonify({
+            "preview_count": len(preview),
+            "total_count": total_count,
+            "preview": preview,
+        })
+
+    except Exception as e:
+        logging.exception("[COMMERCIAL] Unexpected error: %s", e)
+        return jsonify({"error": f"Unexpected error: {e}"}), 500
 
 
 # -------------------------------------------------------------------
