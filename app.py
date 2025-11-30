@@ -47,7 +47,7 @@ S3_PREFIX = os.getenv("S3_PREFIX", "").strip()  # IMPORTANT: leave this empty in
 ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD", "Charlotte69")
 SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(24).hex()
 
-# NEW: Google Places API key (prefer GOOGLE_API_KEY, fall back to GOOGLE_MAPS_API_KEY)
+# Google Places API key (prefer GOOGLE_API_KEY, fall back to GOOGLE_MAPS_API_KEY)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
 
 app = Flask(__name__)
@@ -250,7 +250,7 @@ def parse_query_location(query: str) -> tuple[str | None, str | None]:
       'homes in wakulla county florida'
       'residential addresses in Cuyahoga County Ohio'
 
-    NOTE: Option A — we REQUIRE the word 'county' / 'parish' / 'borough'.
+    We REQUIRE the word 'county' / 'parish' / 'borough'.
     """
     q = query.lower()
     tokens = q.split()
