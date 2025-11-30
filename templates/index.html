@@ -43,7 +43,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 28px;
+            margin-bottom: 24px;
         }
 
         .logo-group {
@@ -53,16 +53,17 @@
         }
 
         .logo-img {
-            height: 30px;
+            height: 28px;
             width: auto;
+            object-fit: contain;
             border-radius: 999px;
             box-shadow:
-                0 0 14px rgba(56,189,248,0.85),
-                0 0 28px rgba(56,189,248,0.4);
+                0 0 12px rgba(56,189,248,0.8),
+                0 0 24px rgba(56,189,248,0.4);
         }
 
         .logo {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
             letter-spacing: 0.18em;
             text-transform: uppercase;
@@ -74,23 +75,22 @@
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.14em;
-            padding: 5px 12px;
+            padding: 4px 10px;
             border-radius: 999px;
             border: 1px solid rgba(148,163,184,0.6);
             color: var(--muted);
             background: rgba(15,23,42,0.9);
         }
 
-        /* TOGGLE BUTTONS */
         .mode-toggle {
             display: flex;
             gap: 10px;
-            margin-bottom: 28px;
+            margin-bottom: 16px;
         }
 
         .toggle-btn {
-            padding: 10px 16px;
-            border-radius: 12px;
+            padding: 8px 14px;
+            border-radius: 999px;
             border: 1px solid var(--border);
             background: rgba(15,23,42,0.9);
             font-size: 13px;
@@ -105,28 +105,38 @@
             font-weight: 600;
         }
 
-        /* SEARCH BOX */
         .search-box {
-            margin-bottom: 20px;
+            margin-bottom: 14px;
         }
 
         #query {
             width: 100%;
-            padding: 14px;
+            padding: 12px;
             font-size: 15px;
-            border-radius: 12px;
+            border-radius: 10px;
             border: 1px solid var(--border);
             background: #020617;
             color: var(--text);
             outline: none;
         }
 
+        .search-btn {
+            margin-top: 8px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: none;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            color: #020617;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
         .examples-label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.12em;
-            margin-top: 14px;
             margin-bottom: 6px;
         }
 
@@ -146,29 +156,39 @@
             cursor: pointer;
         }
 
-        /* RESULTS TABLE */
+        .error {
+            margin-top: 12px;
+            padding: 10px;
+            background: rgba(127,29,29,0.9);
+            border-radius: 10px;
+            border: 1px solid rgba(248,113,113,0.8);
+            color: #fecaca;
+            font-size: 13px;
+            display: none;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 22px;
+            margin-top: 18px;
             display: none;
         }
 
         th, td {
-            border: 1px solid #2a3344;
+            border: 1px solid #30363d;
             padding: 10px;
-            font-size: 14px;
             text-align: left;
+            font-size: 13px;
         }
 
         th {
-            background: rgba(15,23,42,0.8);
+            background-color: rgba(15,23,42,0.9);
             color: var(--accent);
         }
 
         .download-btn {
-            margin-top: 16px;
-            padding: 10px 18px;
+            margin-top: 14px;
+            padding: 10px 16px;
             border-radius: 999px;
             border: none;
             background: linear-gradient(90deg, var(--accent), var(--accent2));
@@ -177,85 +197,55 @@
             font-size: 13px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.13em;
-            display: none;
-        }
-
-        .error {
-            margin-top: 16px;
-            padding: 12px;
-            background: rgba(127,29,29,0.9);
-            border-radius: 10px;
-            border: 1px solid rgba(248,113,113,0.6);
-            color: #fecaca;
-            font-size: 13px;
-            display: none;
         }
     </style>
 </head>
-
 <body>
-
 <div class="shell">
 
-    <!-- HEADER -->
     <div class="top-row">
         <div class="logo-group">
-            <img src="{{ url_for('static', filename='3.png') }}" class="logo-img">
+            <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
             <div class="logo"><span>PELÉE</span> AI</div>
         </div>
-        <div class="pill-small">Enterprise Console</div>
+        <div class="pill-small">Data Console</div>
     </div>
 
-    <!-- MODE TOGGLE -->
     <div class="mode-toggle">
-        <div class="toggle-btn active" id="btn-residential">Residential</div>
-        <div class="toggle-btn" id="btn-commercial">Business Search</div>
+        <button class="toggle-btn active" id="btn-residential">Residential</button>
+        <button class="toggle-btn" id="btn-commercial">Commercial</button>
     </div>
 
-    <!-- SEARCH BOX -->
     <div class="search-box">
-        <input id="query" placeholder="Search addresses or businesses…" />
+        <input id="query" placeholder="Enter your search (e.g. McDonalds in Cleveland Ohio)" />
+        <button class="search-btn" id="search-btn">Search</button>
     </div>
 
-    <!-- EXAMPLES -->
-    <div class="examples-label">Example queries</div>
-    <div class="example-chip-row" id="examples-container">
-    </div>
+    <div class="examples-label">Examples:</div>
+    <div class="example-chip-row" id="examples-container"></div>
 
-    <!-- ERROR -->
     <div class="error" id="error-box"></div>
 
-    <!-- RESIDENTIAL RESULTS -->
+    <!-- Residential Results -->
     <table id="residential-table">
         <thead>
-        <tr>
-            <th>Address</th>
-            <th>City</th>
-            <th>State</th>
-            <th>ZIP</th>
-            <th>Income</th>
-            <th>Home Value</th>
-        </tr>
+            <tr>
+                <th>Address</th><th>City</th><th>State</th><th>ZIP</th><th>Income</th><th>Home Value</th>
+            </tr>
         </thead>
         <tbody id="residential-body"></tbody>
     </table>
 
-    <!-- COMMERCIAL RESULTS -->
+    <!-- Commercial Results -->
     <table id="commercial-table">
         <thead>
-        <tr>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Phone</th>
-            <th>Website</th>
-            <th>Hours</th>
-        </tr>
+            <tr>
+                <th>Name</th><th>Address</th><th>Phone</th><th>Website</th><th>Hours</th>
+            </tr>
         </thead>
         <tbody id="commercial-body"></tbody>
     </table>
 
-    <!-- CSV DOWNLOAD -->
     <form id="download-form" method="POST" action="/download" style="display:none;">
         <input type="hidden" name="query" id="download-query">
         <button type="submit" class="download-btn" id="download-btn">Download CSV</button>
@@ -264,47 +254,45 @@
 </div>
 
 <script>
-/* -----------------------------
-   TOGGLE BUTTON LOGIC
---------------------------------*/
+// ----- Toggle + Example Setup ----- //
 const btnRes = document.getElementById("btn-residential");
 const btnCom = document.getElementById("btn-commercial");
+const queryInput = document.getElementById("query");
+const examplesContainer = document.getElementById("examples-container");
+const errorBox = document.getElementById("error-box");
 
 const resTable = document.getElementById("residential-table");
 const comTable = document.getElementById("commercial-table");
-const resBody  = document.getElementById("residential-body");
-const comBody  = document.getElementById("commercial-body");
+const resBody = document.getElementById("residential-body");
+const comBody = document.getElementById("commercial-body");
 
-const downloadForm  = document.getElementById("download-form");
+const downloadForm = document.getElementById("download-form");
 const downloadQuery = document.getElementById("download-query");
-const downloadBtn   = document.getElementById("download-btn");
-
-const errorBox = document.getElementById("error-box");
-const examplesContainer = document.getElementById("examples-container");
+const downloadBtn = document.getElementById("download-btn");
 
 let MODE = "residential";
 
 const EXAMPLES = {
     residential: [
-        "\"$1M–$3M homes in Santa Clara County California\"",
-        "\"4+ bed SFRs in Palo Alto California built after 2015\"",
-        "\"Households earning $250k+ near Mountain View California\""
+        "McDonalds in Cleveland Ohio",
+        "Starbucks near Mountain View CA",
+        "Pharmacies in Sunnyvale"
     ],
     commercial: [
-        "\"Coffee shops in Palo Alto\"",
-        "\"Pharmacies in Sunnyvale\"",
-        "\"Restaurants within 10 miles of Mountain View\""
+        "Pharmacies in Palo Alto",
+        "McDonalds in Cleveland Ohio",
+        "Retail stores in Austin TX"
     ]
 };
 
 function updateExamples() {
     examplesContainer.innerHTML = "";
-    EXAMPLES[MODE].forEach(ex => {
+    EXAMPLES[MODE].forEach(txt => {
         const chip = document.createElement("div");
         chip.className = "example-chip";
-        chip.innerText = ex;
+        chip.innerText = `"${txt}"`;
         chip.onclick = () => {
-            document.getElementById("query").value = ex.replace(/"/g, "");
+            queryInput.value = txt;
         };
         examplesContainer.appendChild(chip);
     });
@@ -334,80 +322,74 @@ btnCom.onclick = () => {
 
 updateExamples();
 
-/* -----------------------------
-   RUN SEARCH
---------------------------------*/
+document.getElementById("search-btn").onclick = runSearch;
+queryInput.addEventListener("keypress", e => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        runSearch();
+    }
+});
+
 async function runSearch() {
     errorBox.style.display = "none";
     resTable.style.display = "none";
     comTable.style.display = "none";
     downloadForm.style.display = "none";
-    const query = document.getElementById("query").value.trim();
-    if (!query) {
-        return showError("Please enter a search.");
-    }
+
+    const q = queryInput.value.trim();
+    if (!q) return (errorBox.innerText = "Please enter a search.", errorBox.style.display = "block");
+
     if (MODE === "residential") {
-        await searchResidential(query);
+        await searchResidential(q);
     } else {
-        await searchCommercial(query);
+        await searchCommercial(q);
     }
 }
 
-document.getElementById("query").addEventListener("keypress", function (e) {
-    if (e.key === "Enter") runSearch();
-});
-
-/* -----------------------------
-   RESIDENTIAL SEARCH (AJAX)
---------------------------------*/
-async function searchResidential(query) {
+async function searchResidential(q) {
     try {
-        const res = await fetch("/search", {
+        const resp = await fetch("/search", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ query })
+            body: JSON.stringify({query: q})
         });
-
-        const data = await res.json();
-        if (!data.ok) return showError(data.error);
-
+        const data = await resp.json();
+        if (!data.ok) {
+            throw new Error(data.error || "No results.");
+        }
         resBody.innerHTML = "";
-        data.results.forEach(row => {
+        data.results.forEach(r => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
-                <td>${row.address || ""}</td>
-                <td>${row.city || ""}</td>
-                <td>${row.state || ""}</td>
-                <td>${row.zip || ""}</td>
-                <td>${row.income ?? ""}</td>
-                <td>${row.home_value ?? ""}</td>
+                <td>${r.address || ""}</td>
+                <td>${r.city || ""}</td>
+                <td>${r.state || ""}</td>
+                <td>${r.zip || ""}</td>
+                <td>${r.income ?? ""}</td>
+                <td>${r.home_value ?? ""}</td>
             `;
             resBody.appendChild(tr);
         });
-
         resTable.style.display = "table";
-        downloadQuery.value = query;
+        downloadQuery.value = q;
         downloadForm.style.display = "block";
-
     } catch (err) {
-        showError("Server error.");
+        errorBox.innerText = err.message;
+        errorBox.style.display = "block";
     }
 }
 
-/* -----------------------------
-   COMMERCIAL SEARCH (GOOGLE)
---------------------------------*/
-async function searchCommercial(query) {
+async function searchCommercial(q) {
     try {
-        const res = await fetch("/commercial_search", {
+        const resp = await fetch("/commercial_search", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ query })
+            body: JSON.stringify({query: q})
         });
-
-        const data = await res.json();
-        if (!data.ok) return showError(data.error);
-
+        const data = await resp.json();
+        if (!data.ok) {
+            throw new Error(data.error || "No results.");
+        }
         comBody.innerHTML = "";
         data.results.forEach(r => {
             const tr = document.createElement("tr");
@@ -415,27 +397,17 @@ async function searchCommercial(query) {
                 <td>${r.Name || ""}</td>
                 <td>${r.Address || ""}</td>
                 <td>${r.Phone || ""}</td>
-                <td>${r.Website !== "N/A" ? `<a href="${r.Website}" target="_blank">Website</a>` : "N/A"}</td>
+                <td>${r.Website && r.Website !== "N/A" ? `<a href="${r.Website}" target="_blank">Website</a>` : "N/A"}</td>
                 <td>${r.Hours || ""}</td>
             `;
             comBody.appendChild(tr);
         });
-
         comTable.style.display = "table";
-
     } catch (err) {
-        showError("Server error.");
+        errorBox.innerText = err.message;
+        errorBox.style.display = "block";
     }
 }
-
-/* -----------------------------
-   ERROR HANDLING
---------------------------------*/
-function showError(msg) {
-    errorBox.innerText = msg;
-    errorBox.style.display = "block";
-}
 </script>
-
 </body>
 </html>
