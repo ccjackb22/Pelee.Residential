@@ -17,16 +17,13 @@
             --danger: #fecaca;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
             min-height: 100vh;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-            background:
-                radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+            background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
             color: var(--text-main);
             display: flex;
             justify-content: center;
@@ -36,9 +33,10 @@
         .shell {
             width: 100%;
             max-width: 1040px;
-            background: radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 55%),
-                        radial-gradient(circle at top right, rgba(34,197,94,0.05), transparent 55%),
-                        rgba(15,23,42,0.98);
+            background:
+                radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 55%),
+                radial-gradient(circle at top right, rgba(34,197,94,0.05), transparent 55%),
+                rgba(15,23,42,0.98);
             border-radius: 20px;
             padding: 22px 22px 20px;
             border: 1px solid rgba(148,163,184,0.5);
@@ -64,7 +62,6 @@
             font-size: 20px;
             letter-spacing: 0.16em;
         }
-
         .logo span {
             color: var(--accent);
         }
@@ -74,15 +71,7 @@
             color: var(--text-muted);
         }
 
-        .user-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .user-actions a {
-            text-decoration: none;
-        }
+        .user-actions { display: flex; align-items: center; gap: 8px; }
 
         .btn-ghost {
             font-size: 11px;
@@ -95,17 +84,12 @@
             color: var(--text-muted);
             cursor: pointer;
         }
-
         .btn-ghost:hover {
             border-color: rgba(148,163,184,1);
             color: #e5e7eb;
         }
 
-        main {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
+        main { display: flex; flex-direction: column; gap: 16px; }
 
         .panel {
             border-radius: 16px;
@@ -145,7 +129,6 @@
             flex-direction: column;
             gap: 10px;
         }
-
         @media (min-width: 720px) {
             .search-row {
                 flex-direction: row;
@@ -157,7 +140,6 @@
             flex: 1;
             position: relative;
         }
-
         .search-input {
             width: 100%;
             padding: 10px 11px 10px 32px;
@@ -168,10 +150,7 @@
             font-size: 14px;
             outline: none;
         }
-
-        .search-input::placeholder {
-            color: var(--text-muted);
-        }
+        .search-input::placeholder { color: var(--text-muted); }
 
         .search-icon {
             position: absolute;
@@ -195,19 +174,14 @@
             color: #020617;
             white-space: nowrap;
         }
-
-        .btn-primary:hover {
-            filter: brightness(1.05);
-        }
+        .btn-primary:hover { filter: brightness(1.05); }
 
         .hint-row {
             margin-top: 6px;
             font-size: 11px;
             color: var(--text-muted);
         }
-
         .hint-row code {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             background: rgba(15,23,42,0.8);
             border-radius: 999px;
             padding: 2px 8px;
@@ -235,13 +209,9 @@
             margin-bottom: 8px;
         }
 
-        .results-header strong {
-            color: #e5e7eb;
-        }
+        .results-header strong { color: #e5e7eb; }
 
-        .download-form {
-            margin: 0;
-        }
+        .download-form { margin: 0; }
 
         .btn-secondary {
             border-radius: 999px;
@@ -254,10 +224,7 @@
             padding: 6px 12px;
             cursor: pointer;
         }
-
-        .btn-secondary:hover {
-            color: #e5e7eb;
-        }
+        .btn-secondary:hover { color: #e5e7eb; }
 
         .results-table-wrap {
             border-radius: 12px;
@@ -275,32 +242,21 @@
         .results-table thead {
             background: rgba(15,23,42,0.98);
         }
-
         .results-table th,
         .results-table td {
             padding: 7px 8px;
             border-bottom: 1px solid rgba(30,64,175,0.65);
             text-align: left;
         }
-
         .results-table th {
             font-size: 11px;
             color: #9ca3af;
             text-transform: uppercase;
             letter-spacing: 0.11em;
         }
-
-        .results-table tbody tr:nth-child(even) {
-            background: rgba(15,23,42,0.85);
-        }
-
-        .results-table tbody tr:nth-child(odd) {
-            background: rgba(15,23,42,0.93);
-        }
-
-        .results-table tbody tr:hover {
-            background: rgba(15,23,42,1);
-        }
+        .results-table tbody tr:nth-child(even) { background: rgba(15,23,42,0.85); }
+        .results-table tbody tr:nth-child(odd) { background: rgba(15,23,42,0.93); }
+        .results-table tbody tr:hover { background: rgba(15,23,42,1); }
 
         .metric-pill {
             display: inline-block;
@@ -311,15 +267,10 @@
             color: #bbf7d0;
             background: rgba(6,78,59,0.8);
         }
-
         .metric-pill.income {
             border-color: rgba(59,130,246,0.7);
             color: #bfdbfe;
             background: rgba(30,64,175,0.85);
-        }
-
-        .metric-pill span {
-            opacity: 0.9;
         }
 
         .subtext {
@@ -328,40 +279,29 @@
             color: var(--text-muted);
         }
 
-        .subtext strong {
-            color: #e5e7eb;
-        }
-
-        /* Mode toggle row */
-
+        /* MODE TOGGLE (GET-BASED LINKS) */
         .mode-row {
             display: inline-flex;
             gap: 6px;
             margin-bottom: 8px;
         }
-
         .mode-pill {
             font-size: 11px;
             letter-spacing: 0.12em;
             text-transform: uppercase;
             border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.7);
             padding: 4px 10px;
+            border: 1px solid rgba(148,163,184,0.7);
             background: rgba(15,23,42,0.9);
             color: var(--text-muted);
             cursor: pointer;
+            text-decoration: none;
         }
-
         .mode-pill.active {
             border-color: rgba(56,189,248,0.9);
             background: rgba(15,23,42,1);
             color: #e5e7eb;
         }
-
-        .mode-row input {
-            display: none;
-        }
-
     </style>
 </head>
 <body>
@@ -379,6 +319,7 @@
     </header>
 
     <main>
+
         <!-- SEARCH PANEL -->
         <section class="panel">
             <div class="panel-header">
@@ -386,21 +327,17 @@
                 <div class="pill">Instant CSV export</div>
             </div>
 
-            <!-- MODE TOGGLE -->
-            <form method="POST" action="{{ url_for('search') }}">
-                <div class="mode-row">
-                    <label class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="residential"
-                               {% if mode != 'commercial' %}checked{% endif %}>
-                        Residential
-                    </label>
-                    <label class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="commercial"
-                               {% if mode == 'commercial' %}checked{% endif %}>
-                        Commercial
-                    </label>
-                </div>
+            <!-- MODE TOGGLE (GET LINKS) -->
+            <div class="mode-row">
+                <a href="?mode=residential" class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
+                    Residential
+                </a>
+                <a href="?mode=commercial" class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
+                    Commercial
+                </a>
+            </div>
 
+            <form method="POST" action="{{ url_for('search') }}?mode={{ mode }}">
                 <div class="search-row">
                     <div class="search-input-wrap">
                         <span class="search-icon">🔍</span>
@@ -420,52 +357,41 @@
             <div class="hint-row">
                 {% if mode == 'commercial' %}
                     Examples:
-                    <code>pharmacies in Palo Alto</code>
-                    ·
-                    <code>McDonalds in Cleveland Ohio</code>
-                    ·
+                    <code>pharmacies in Palo Alto</code> ·
+                    <code>McDonalds in Cleveland Ohio</code> ·
                     <code>coffee shops near Charlotte NC</code>
                 {% else %}
                     Examples:
-                    <code>residential addresses in Cuyahoga County Ohio</code>
-                    ·
+                    <code>residential addresses in Cuyahoga County Ohio</code> ·
                     <code>homes in Brevard County Florida</code>
                 {% endif %}
             </div>
 
             {% if error %}
-            <div class="error">
-                {{ error }}
-            </div>
+                <div class="error">{{ error }}</div>
             {% endif %}
-
             {% if commercial_error %}
-            <div class="error">
-                {{ commercial_error }}
-            </div>
+                <div class="error">{{ commercial_error }}</div>
             {% endif %}
         </section>
 
         {% if mode == 'residential' %}
-        <!-- RESIDENTIAL RESULTS PANEL -->
+        <!-- RESIDENTIAL RESULTS -->
         <section class="panel">
             <div class="results-header">
                 <div>
                     {% if location %}
-                        <strong>{{ shown }}</strong> of
-                        <strong>{{ total if total is not none else 0 }}</strong>
+                        <strong>{{ shown }}</strong> of <strong>{{ total }}</strong>
                         matches in <strong>{{ location }}</strong>
                     {% else %}
-                        No search run yet. Enter a query with county + state to begin.
+                        No search run yet.
                     {% endif %}
                 </div>
 
                 {% if download_available %}
                 <form class="download-form" method="POST" action="{{ url_for('download_csv') }}">
-                    <input type="hidden" name="query" value="{{ query or '' }}" />
-                    <button type="submit" class="btn-secondary">
-                        ⬇️ Download full CSV
-                    </button>
+                    <input type="hidden" name="query" value="{{ query or '' }}">
+                    <button type="submit" class="btn-secondary">⬇️ Download full CSV</button>
                 </form>
                 {% endif %}
             </div>
@@ -485,65 +411,47 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% if results and results|length > 0 %}
+                        {% if results %}
                             {% for r in results %}
                             <tr>
-                                <td>{{ r.address or '' }}</td>
-                                <td>{{ r.number or '' }}</td>
-                                <td>{{ r.street or '' }}</td>
-                                <td>{{ r.city or '' }}</td>
-                                <td>{{ r.state or '' }}</td>
-                                <td>{{ r.zip or '' }}</td>
+                                <td>{{ r.address }}</td>
+                                <td>{{ r.number }}</td>
+                                <td>{{ r.street }}</td>
+                                <td>{{ r.city }}</td>
+                                <td>{{ r.state }}</td>
+                                <td>{{ r.zip }}</td>
                                 <td>
-                                    {% if r.income is not none %}
-                                        <span class="metric-pill income">
-                                            ${{ "{:,.0f}".format(r.income) }}
-                                        </span>
+                                    {% if r.income %}
+                                    <span class="metric-pill income">${{ "{:,.0f}".format(r.income) }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if r.home_value is not none %}
-                                        <span class="metric-pill">
-                                            ${{ "{:,.0f}".format(r.home_value) }}
-                                        </span>
+                                    {% if r.home_value %}
+                                    <span class="metric-pill">${{ "{:,.0f}".format(r.home_value) }}</span>
                                     {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="8" style="text-align:center; color: var(--text-muted); padding: 10px 0;">
-                                    {% if location %}
-                                        No preview results to display yet. Try widening your filters.
-                                    {% else %}
-                                        Waiting for a search query.
-                                    {% endif %}
-                                </td>
-                            </tr>
                         {% endif %}
                     </tbody>
                 </table>
             </div>
 
             <div class="subtext">
-                Showing up to <strong>20</strong> preview rows from the cleaned county dataset.
-                Use the CSV export for the full result set.
+                Showing up to <strong>20</strong> preview rows.
+                Use CSV export for full dataset.
             </div>
         </section>
+
         {% else %}
-        <!-- COMMERCIAL RESULTS PANEL -->
+        <!-- COMMERCIAL RESULTS -->
         <section class="panel">
             <div class="results-header">
                 <div>
-                    {% if commercial_results and commercial_results|length > 0 %}
-                        Showing <strong>{{ commercial_results|length }}</strong> businesses for:
-                        <strong>{{ query }}</strong>
+                    {% if commercial_results %}
+                        Showing <strong>{{ commercial_results|length }}</strong> businesses for <strong>{{ query }}</strong>
                     {% else %}
-                        {% if query %}
-                            No commercial matches found yet. Try refining your search.
-                        {% else %}
-                            No search run yet. Enter a business search (e.g. 'pharmacies in Palo Alto').
-                        {% endif %}
+                        {% if query %}No results found.{% else %}No search run yet.{% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -560,42 +468,26 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% if commercial_results and commercial_results|length > 0 %}
+                        {% if commercial_results %}
                             {% for r in commercial_results %}
                             <tr>
-                                <td>{{ r.Name or '' }}</td>
-                                <td>{{ r.Address or '' }}</td>
-                                <td>{{ r.Phone or '' }}</td>
+                                <td>{{ r.Name }}</td>
+                                <td>{{ r.Address }}</td>
+                                <td>{{ r.Phone }}</td>
                                 <td>
-                                    {% if r.Website and r.Website != 'N/A' %}
-                                        <a href="{{ r.Website }}" target="_blank" style="color:#93c5fd;">
-                                            Website
-                                        </a>
-                                    {% else %}
-                                        N/A
-                                    {% endif %}
+                                    {% if r.Website != 'N/A' %}
+                                        <a href="{{ r.Website }}" target="_blank" style="color:#93c5fd;">Website</a>
+                                    {% else %}N/A{% endif %}
                                 </td>
-                                <td>{{ r.Hours or '' }}</td>
+                                <td>{{ r.Hours }}</td>
                             </tr>
                             {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="5" style="text-align:center; color: var(--text-muted); padding: 10px 0;">
-                                    {% if query %}
-                                        No commercial results to display yet.
-                                    {% else %}
-                                        Waiting for a commercial query.
-                                    {% endif %}
-                                </td>
-                            </tr>
                         {% endif %}
                     </tbody>
                 </table>
             </div>
 
-            <div class="subtext">
-                Commercial lookups are powered by Google Places. Results are returned as-is from Google.
-            </div>
+            <div class="subtext">Commercial results powered by Google Places.</div>
         </section>
         {% endif %}
     </main>
