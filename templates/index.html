@@ -23,7 +23,7 @@
         body {
             margin: 0;
             min-height: 100vh;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            font-family: system-ui, -apple-system, "Inter", sans-serif;
             background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
             color: var(--text-main);
             display: flex;
@@ -53,21 +53,9 @@
         }
 
         .brand-block { display: flex; flex-direction: column; gap: 4px; }
-
-        .logo {
-            font-weight: 700;
-            font-size: 20px;
-            letter-spacing: 0.16em;
-        }
-
+        .logo { font-weight: 700; font-size: 20px; letter-spacing: 0.16em; }
         .logo span { color: var(--accent); }
-
-        .tagline {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-
-        .user-actions { display: flex; align-items: center; gap: 8px; }
+        .tagline { font-size: 13px; color: var(--text-muted); }
 
         .btn-ghost {
             font-size: 11px;
@@ -80,40 +68,32 @@
             color: var(--text-muted);
             cursor: pointer;
         }
-
-        .btn-ghost:hover {
-            border-color: rgba(148,163,184,1);
-            color: #e5e7eb;
-        }
-
-        main { display: flex; flex-direction: column; gap: 16px; }
+        .btn-ghost:hover { color: #e5e7eb; }
 
         .panel {
             border-radius: 16px;
             border: 1px solid rgba(51,65,85,0.95);
             background: rgba(15,23,42,0.96);
             padding: 14px 14px 12px;
+            margin-bottom: 16px;
         }
 
         .panel-header {
             display: flex;
             justify-content: space-between;
-            align-items: baseline;
             margin-bottom: 8px;
         }
 
         .panel-title {
             font-size: 13px;
-            font-weight: 500;
-            letter-spacing: 0.09em;
             text-transform: uppercase;
+            letter-spacing: 0.09em;
             color: var(--text-muted);
         }
 
         .pill {
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
             border-radius: 999px;
             padding: 4px 10px;
             border: 1px solid rgba(56,189,248,0.7);
@@ -121,50 +101,46 @@
             background: rgba(15,23,42,0.85);
         }
 
-        /* ==== TOGGLE ==== */
-        .mode-toggle {
+        .toggle-row {
             display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
+            gap: 10px;
+            margin-bottom: 12px;
         }
 
         .toggle-btn {
-            padding: 8px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(148,163,184,0.5);
-            background: rgba(15,23,42,0.8);
-            font-size: 12px;
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            border-radius: 999px;
             cursor: pointer;
+            font-size: 13px;
+            border: 1px solid rgba(148,163,184,0.6);
+            background: rgba(15,23,42,0.9);
             color: var(--text-muted);
         }
-
         .toggle-btn.active {
             background: linear-gradient(90deg, #0ea5e9, #22c55e);
             color: #020617;
             font-weight: 600;
-            border-color: transparent;
         }
 
-        .search-row { display: flex; flex-direction: column; gap: 10px; }
-
-        @media (min-width: 720px) {
-            .search-row {
-                flex-direction: row;
-                align-items: center;
-            }
+        .search-row {
+            display: flex;
+            gap: 10px;
         }
 
-        .search-input-wrap { flex: 1; position: relative; }
+        .search-input-wrap {
+            flex: 1;
+            position: relative;
+        }
 
         .search-input {
             width: 100%;
-            padding: 10px 11px 10px 32px;
+            padding: 10px 12px 10px 32px;
             border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.7);
             background: radial-gradient(circle at top left, rgba(15,23,42,0.95), #020617);
+            border: 1px solid rgba(148,163,184,0.7);
             color: var(--text-main);
-            font-size: 14px;
-            outline: none;
         }
 
         .search-icon {
@@ -172,90 +148,51 @@
             left: 10px;
             top: 50%;
             transform: translateY(-50%);
-            font-size: 13px;
             color: var(--text-muted);
         }
 
         .btn-primary {
+            padding: 10px 18px;
             border-radius: 999px;
             border: none;
-            padding: 10px 18px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            cursor: pointer;
             background: linear-gradient(90deg, #0ea5e9, #22c55e);
             color: #020617;
-            white-space: nowrap;
-        }
-
-        .btn-primary:hover { filter: brightness(1.05); }
-
-        .examples-label {
-            margin-top: 10px;
-            font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.12em;
-            color: var(--text-muted);
-        }
-
-        .example-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
-
-        .example-chip {
-            font-size: 11px;
-            border-radius: 999px;
-            padding: 6px 10px;
-            border: 1px solid rgba(51,65,85,0.95);
-            background: rgba(15,23,42,0.95);
-            color: #cbd5f5;
             cursor: pointer;
         }
 
-        .error {
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--danger);
-            background: rgba(127,29,29,0.9);
-            border-radius: 10px;
-            padding: 8px 10px;
-            border: 1px solid rgba(248,113,113,0.85);
-            display: none;
+        .results-table-wrap {
+            border-radius: 12px;
+            margin-top: 12px;
+            border: 1px solid rgba(30,64,175,0.9);
+            overflow: hidden;
         }
 
         .results-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 12px;
-        }
-
-        .results-table th,
-        .results-table td {
-            border: 1px solid rgba(30,64,175,0.65);
-            padding: 8px;
             font-size: 12px;
         }
 
-        .results-table th {
-            color: var(--accent);
-            background: rgba(15,23,42,0.9);
+        th, td {
+            padding: 6px 8px;
+            border-bottom: 1px solid rgba(30,64,175,0.6);
+            text-align: left;
         }
 
-        .download-form {
-            margin-top: 10px;
-            display: none;
-        }
-
-        .btn-secondary {
-            padding: 7px 12px;
+        .metric-pill {
+            padding: 2px 7px;
             border-radius: 999px;
             font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: .12em;
-            background: rgba(15,23,42,0.9);
-            border: 1px solid rgba(148,163,184,0.9);
-            color: var(--text-muted);
-            cursor: pointer;
+        }
+
+        .error {
+            background: rgba(127,29,29,0.9);
+            border-radius: 10px;
+            padding: 10px;
+            color: var(--danger);
+            margin-top: 8px;
         }
     </style>
 </head>
@@ -263,254 +200,178 @@
 <body>
 <div class="shell">
 
-    <!-- Header -->
     <header>
         <div class="brand-block">
             <div class="logo"><span>PELÉE</span> AI</div>
             <div class="tagline">Internal data tool · residential + commercial address discovery</div>
         </div>
-        <div class="user-actions">
-            <form action="{{ url_for('logout') }}" method="GET">
-                <button type="submit" class="btn-ghost">Logout</button>
-            </form>
-        </div>
+
+        <form action="{{ url_for('logout') }}" method="GET">
+            <button class="btn-ghost">Logout</button>
+        </form>
     </header>
 
-    <main>
+    <!-- SEARCH PANEL -->
+    <section class="panel">
 
-        <!-- SEARCH PANEL -->
-        <section class="panel">
-            <div class="panel-header">
-                <div class="panel-title">Simple natural-language search</div>
-                <div class="pill">Instant CSV export</div>
+        <div class="panel-header">
+            <div class="panel-title">Simple natural-language search</div>
+            <div class="pill">Instant CSV export</div>
+        </div>
+
+        <div class="toggle-row">
+            <div id="btn-res" class="toggle-btn active">Residential</div>
+            <div id="btn-com" class="toggle-btn">Commercial</div>
+        </div>
+
+        <div class="search-row">
+            <div class="search-input-wrap">
+                <span class="search-icon">🔍</span>
+                <input id="query" class="search-input" type="text"
+                       placeholder="residential addresses in Cuyahoga County Ohio" />
             </div>
+            <button id="searchBtn" class="btn-primary">Search</button>
+        </div>
 
-            <!-- TOGGLE -->
-            <div class="mode-toggle">
-                <div id="btn-residential" class="toggle-btn active">Residential</div>
-                <div id="btn-commercial" class="toggle-btn">Commercial</div>
-            </div>
+        <div id="examples" class="hint-row" style="margin-top:8px;font-size:11px;color:#9ca3af;">
+            Examples:
+            <code>"residential addresses in Cuyahoga County Ohio"</code> ·
+            <code>"homes in Brevard County Florida"</code>
+        </div>
 
-            <!-- SEARCH -->
-            <div class="search-row">
-                <div class="search-input-wrap">
-                    <span class="search-icon">🔍</span>
-                    <input
-                        id="query"
-                        class="search-input"
-                        type="text"
-                        placeholder="residential addresses in Cuyahoga County Ohio"
-                        autocomplete="off"
-                    />
-                </div>
-                <button id="search-btn" class="btn-primary">Search</button>
-            </div>
+        <div id="errorBox" class="error" style="display:none;"></div>
 
-            <div class="examples-label">Examples</div>
-            <div id="examples-container" class="example-chip-row"></div>
+    </section>
 
-            <div id="error-box" class="error"></div>
+    <!-- RESULTS -->
+    <section class="panel" id="resultsPanel" style="display:none;">
+        <div id="resultMeta" style="font-size:12px;color:#9ca3af;margin-bottom:8px;"></div>
 
-            <!-- RESIDENTIAL TABLE -->
-            <table id="residential-table" class="results-table" style="display:none;">
-                <thead>
-                    <tr>
-                        <th>Address</th>
-                        <th>City</th>
-                        <th>State</th>
-                        <th>ZIP</th>
-                        <th>Income</th>
-                        <th>Home Value</th>
-                    </tr>
-                </thead>
-                <tbody id="residential-body"></tbody>
-            </table>
+        <div class="results-table-wrap">
+            <table class="results-table" id="resultsTable"></table>
+        </div>
+    </section>
 
-            <!-- COMMERCIAL TABLE -->
-            <table id="commercial-table" class="results-table" style="display:none;">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Address</th>
-                        <th>Phone</th>
-                        <th>Website</th>
-                        <th>Hours</th>
-                    </tr>
-                </thead>
-                <tbody id="commercial-body"></tbody>
-            </table>
-
-            <!-- CSV DOWNLOAD -->
-            <form id="download-form" class="download-form" method="POST" action="/download">
-                <input id="download-query" type="hidden" name="query">
-                <button type="submit" class="btn-secondary">⬇️ Download full CSV</button>
-            </form>
-
-        </section>
-    </main>
 </div>
 
-<!-- Scripts -->
 <script>
-const btnRes = document.getElementById("btn-residential");
-const btnCom = document.getElementById("btn-commercial");
-const queryInput = document.getElementById("query");
-const examplesContainer = document.getElementById("examples-container");
-const errorBox = document.getElementById("error-box");
+let mode = "residential";
 
-const resTable = document.getElementById("residential-table");
-const comTable = document.getElementById("commercial-table");
-const resBody = document.getElementById("residential-body");
-const comBody = document.getElementById("commercial-body");
-
-const downloadForm = document.getElementById("download-form");
-const downloadQuery = document.getElementById("download-query");
-
-let MODE = "residential";
-
-const EXAMPLES = {
-    residential: [
-        "residential addresses in Cuyahoga County Ohio",
-        "homes in Brevard County Florida",
-        "addresses in Fulton County GA"
-    ],
-    commercial: [
-        "Pharmacies in Palo Alto",
-        "McDonalds in Cleveland Ohio",
-        "Retail stores in Austin TX"
-    ]
+document.getElementById("btn-res").onclick = () => {
+    mode = "residential";
+    document.getElementById("btn-res").classList.add("active");
+    document.getElementById("btn-com").classList.remove("active");
+    document.getElementById("examples").innerHTML =
+        `Examples:
+        <code>"residential addresses in Cuyahoga County Ohio"</code> ·
+        <code>"homes in Brevard County Florida"</code>`;
 };
 
-function updateExamples() {
-    examplesContainer.innerHTML = "";
-    EXAMPLES[MODE].forEach(txt => {
-        const chip = document.createElement("div");
-        chip.className = "example-chip";
-        chip.innerText = `"${txt}"`;
-        chip.onclick = () => { queryInput.value = txt; };
-        examplesContainer.appendChild(chip);
-    });
-}
-
-btnRes.onclick = () => {
-    MODE = "residential";
-    btnRes.classList.add("active");
-    btnCom.classList.remove("active");
-    resTable.style.display = "none";
-    comTable.style.display = "none";
-    downloadForm.style.display = "none";
-    updateExamples();
+document.getElementById("btn-com").onclick = () => {
+    mode = "commercial";
+    document.getElementById("btn-com").classList.add("active");
+    document.getElementById("btn-res").classList.remove("active");
+    document.getElementById("examples").innerHTML =
+        `Examples:
+        <code>"pharmacies in Palo Alto"</code> ·
+        <code>"McDonalds in Cleveland Ohio"</code>`;
 };
 
-btnCom.onclick = () => {
-    MODE = "commercial";
-    btnCom.classList.add("active");
-    btnRes.classList.remove("active");
-    resTable.style.display = "none";
-    comTable.style.display = "none";
-    downloadForm.style.display = "none";
-    updateExamples();
-};
+document.getElementById("searchBtn").onclick = async () => {
+    const q = document.getElementById("query").value.trim();
+    const errorBox = document.getElementById("errorBox");
+    const table = document.getElementById("resultsTable");
+    const panel = document.getElementById("resultsPanel");
+    const meta = document.getElementById("resultMeta");
 
-updateExamples();
-
-document.getElementById("search-btn").onclick = runSearch;
-
-queryInput.addEventListener("keypress", e => {
-    if (e.key === "Enter") {
-        e.preventDefault();
-        runSearch();
-    }
-});
-
-async function runSearch() {
     errorBox.style.display = "none";
-    resTable.style.display = "none";
-    comTable.style.display = "none";
-    downloadForm.style.display = "none";
+    table.innerHTML = "";
+    panel.style.display = "none";
 
-    const q = queryInput.value.trim();
     if (!q) {
-        errorBox.innerText = "Please enter a search.";
+        errorBox.innerText = "Please enter a search query.";
         errorBox.style.display = "block";
         return;
     }
 
-    if (MODE === "residential") {
-        return searchResidential(q);
-    } else {
-        return searchCommercial(q);
+    let url = (mode === "residential") ? "/search" : "/commercial_search";
+
+    let payload = (mode === "residential")
+        ? new URLSearchParams({ query: q })
+        : JSON.stringify({ query: q });
+
+    let headers = (mode === "residential")
+        ? { "Content-Type": "application/x-www-form-urlencoded" }
+        : { "Content-Type": "application/json" };
+
+    const res = await fetch(url, { method:"POST", body: payload, headers });
+
+    let data;
+    try { data = await res.json(); }
+    catch {
+        errorBox.innerText = "Invalid JSON response from server.";
+        errorBox.style.display = "block";
+        return;
     }
-}
 
-async function searchResidential(q) {
-    try {
-        const formData = new FormData();
-        formData.append("query", q);
+    if (!data.ok) {
+        errorBox.innerText = data.error || "Search failed.";
+        errorBox.style.display = "block";
+        return;
+    }
 
-        const resp = await fetch("/search", {
-            method: "POST",
-            body: formData
-        });
+    // Commercial
+    if (mode === "commercial") {
+        meta.innerText = `${data.results.length} businesses found`;
+        table.innerHTML = `
+            <tr><th>Name</th><th>Address</th><th>Phone</th><th>Website</th><th>Hours</th></tr>
+        `;
+        for (let r of data.results) {
+            table.innerHTML += `
+                <tr>
+                    <td>${r.Name || ""}</td>
+                    <td>${r.Address || ""}</td>
+                    <td>${r.Phone || ""}</td>
+                    <td>${r.Website || ""}</td>
+                    <td>${r.Hours || ""}</td>
+                </tr>`;
+        }
+        panel.style.display = "block";
+        return;
+    }
 
-        const data = await resp.json();
-        if (!data.ok) throw new Error(data.error || "No results.");
+    // Residential
+    meta.innerText = `${data.total} matches in ${data.location}`;
+    table.innerHTML = `
+        <tr>
+            <th>Full Address</th>
+            <th>#</th>
+            <th>Street</th>
+            <th>City</th>
+            <th>State</th>
+            <th>ZIP</th>
+            <th>Income</th>
+            <th>Home Value</th>
+        </tr>
+    `;
 
-        resBody.innerHTML = "";
-        data.results.forEach(r => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
+    for (let r of data.results) {
+        table.innerHTML += `
+            <tr>
                 <td>${r.address || ""}</td>
+                <td>${r.number || ""}</td>
+                <td>${r.street || ""}</td>
                 <td>${r.city || ""}</td>
                 <td>${r.state || ""}</td>
                 <td>${r.zip || ""}</td>
-                <td>${r.income ?? ""}</td>
-                <td>${r.home_value ?? ""}</td>
-            `;
-            resBody.appendChild(tr);
-        });
-
-        resTable.style.display = "table";
-        downloadQuery.value = q;
-        downloadForm.style.display = "block";
-
-    } catch (err) {
-        errorBox.innerText = err.message;
-        errorBox.style.display = "block";
+                <td>${r.income ? "$" + r.income.toLocaleString() : ""}</td>
+                <td>${r.home_value ? "$" + r.home_value.toLocaleString() : ""}</td>
+            </tr>
+        `;
     }
-}
 
-async function searchCommercial(q) {
-    try {
-        const resp = await fetch("/commercial_search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: q })
-        });
-
-        const data = await resp.json();
-        if (!data.ok) throw new Error(data.error || "No results.");
-
-        comBody.innerHTML = "";
-        data.results.forEach(r => {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>${r.Name || ""}</td>
-                <td>${r.Address || ""}</td>
-                <td>${r.Phone || ""}</td>
-                <td>${r.Website ? `<a href="${r.Website}" target="_blank">Website</a>` : "N/A"}</td>
-                <td>${r.Hours || ""}</td>
-            `;
-            comBody.appendChild(tr);
-        });
-
-        comTable.style.display = "table";
-
-    } catch (err) {
-        errorBox.innerText = err.message;
-        errorBox.style.display = "block";
-    }
-}
+    panel.style.display = "block";
+};
 </script>
 
 </body>
