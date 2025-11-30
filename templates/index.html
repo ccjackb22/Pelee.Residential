@@ -1,758 +1,489 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>PELÉE AI | Data Console</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root {
-      --bg: #020617;
-      --accent: #38bdf8;
-      --accent2: #22c55e;
-      --card: rgba(15,23,42,0.98);
-      --border: rgba(148,163,184,0.5);
-      --text: #e5e7eb;
-      --muted: #94a3b8;
-      --danger: #fecaca;
-    }
+    <meta charset="UTF-8">
+    <title>PELÉE AI | Data Console</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    * { box-sizing: border-box; }
+    <style>
+        :root {
+            --bg: #020617;
+            --accent: #38bdf8;
+            --accent2: #22c55e;
+            --card: rgba(15,23,42,0.96);
+            --border: rgba(148,163,184,0.5);
+            --text: #e5e7eb;
+            --muted: #94a3b8;
+        }
 
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background: radial-gradient(circle at top, #1e293b 0%, #020617 55%, #000 100%);
-      color: var(--text);
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
-      display: flex;
-      justify-content: center;
-      padding: 40px 16px;
-    }
+        * { box-sizing: border-box; }
 
-    .shell {
-      width: 100%;
-      max-width: 1100px;
-      background: linear-gradient(to bottom right, rgba(15,23,42,0.8), rgba(2,6,23,0.98));
-      border-radius: 24px;
-      padding: 24px 24px 28px;
-      border: 1px solid var(--border);
-      box-shadow: 0 32px 90px rgba(0,0,0,0.75);
-    }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: radial-gradient(circle at top, #1e293b 0%, #020617 55%, #000 100%);
+            color: var(--text);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            display: flex;
+            justify-content: center;
+            padding: 48px 16px;
+        }
 
-    .top-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      gap: 12px;
-    }
+        .shell {
+            width: 100%;
+            max-width: 1100px;
+            background: linear-gradient(to bottom right, rgba(30,41,59,0.25), rgba(2,6,23,0.98));
+            border-radius: 24px;
+            padding: 32px 32px 28px;
+            border: 1px solid var(--border);
+            box-shadow: 0 32px 90px rgba(0,0,0,0.75);
+        }
 
-    .logo-group {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+        .top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+        }
 
-    .logo-img {
-      height: 26px;
-      width: auto;
-      object-fit: contain;
-      border-radius: 999px;
-      box-shadow:
-        0 0 12px rgba(56,189,248,0.8),
-        0 0 24px rgba(56,189,248,0.4);
-    }
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-    .logo {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-    }
+        .logo-img {
+            height: 30px;
+            width: auto;
+            border-radius: 999px;
+            box-shadow:
+                0 0 14px rgba(56,189,248,0.85),
+                0 0 28px rgba(56,189,248,0.4);
+        }
 
-    .logo span { color: var(--accent); }
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+        }
 
-    .pill-small {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.6);
-      color: var(--muted);
-      background: rgba(15,23,42,0.9);
-      white-space: nowrap;
-    }
+        .logo span { color: var(--accent); }
 
-    .main-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr);
-      gap: 28px;
-      align-items: flex-start;
-    }
+        .pill-small {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.6);
+            color: var(--muted);
+            background: rgba(15,23,42,0.9);
+        }
 
-    @media (max-width: 900px) {
-      .main-grid {
-        grid-template-columns: 1fr;
-      }
-    }
+        /* TOGGLE BUTTONS */
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 28px;
+        }
 
-    .hero-title {
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-    }
+        .toggle-btn {
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: rgba(15,23,42,0.9);
+            font-size: 13px;
+            cursor: pointer;
+            color: var(--muted);
+        }
 
-    .hero-sub {
-      margin-top: 8px;
-      font-size: 14px;
-      color: var(--muted);
-    }
+        .toggle-btn.active {
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            color: #020617;
+            border-color: transparent;
+            font-weight: 600;
+        }
 
-    .stat-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 18px;
-    }
+        /* SEARCH BOX */
+        .search-box {
+            margin-bottom: 20px;
+        }
 
-    .stat-pill {
-      border-radius: 999px;
-      padding: 6px 11px;
-      border: 1px solid rgba(148,163,184,0.4);
-      background: rgba(15,23,42,0.9);
-      font-size: 12px;
-      color: var(--muted);
-      white-space: nowrap;
-    }
+        #query {
+            width: 100%;
+            padding: 14px;
+            font-size: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: #020617;
+            color: var(--text);
+            outline: none;
+        }
 
-    .stat-pill strong {
-      color: var(--accent);
-      font-weight: 600;
-    }
+        .examples-label {
+            font-size: 12px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-top: 14px;
+            margin-bottom: 6px;
+        }
 
-    .mode-toggle {
-      margin-top: 22px;
-      display: inline-flex;
-      padding: 3px;
-      border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.6);
-      background: rgba(15,23,42,0.9);
-    }
+        .example-chip-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
 
-    .mode-btn {
-      border: none;
-      background: transparent;
-      color: var(--muted);
-      font-size: 11px;
-      padding: 6px 14px;
-      border-radius: 999px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      cursor: pointer;
-    }
+        .example-chip {
+            font-size: 11px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(51,65,85,0.9);
+            background: rgba(15,23,42,0.95);
+            color: #cbd5f5;
+        }
 
-    .mode-btn.active {
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      color: #020617;
-      font-weight: 600;
-    }
+        /* RESULTS TABLE */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 22px;
+            display: none;
+        }
 
-    .mode-caption {
-      margin-top: 8px;
-      font-size: 12px;
-      color: var(--muted);
-    }
+        th, td {
+            border: 1px solid #2a3344;
+            padding: 10px;
+            font-size: 14px;
+            text-align: left;
+        }
 
-    .examples {
-      margin-top: 20px;
-    }
+        th {
+            background: rgba(15,23,42,0.8);
+            color: var(--accent);
+        }
 
-    .examples-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
+        .download-btn {
+            margin-top: 16px;
+            padding: 10px 18px;
+            border-radius: 999px;
+            border: none;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            color: #020617;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.13em;
+            display: none;
+        }
 
-    .example-chip-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .example-chip {
-      font-size: 11px;
-      border-radius: 999px;
-      padding: 6px 10px;
-      border: 1px solid rgba(51,65,85,0.9);
-      background: rgba(15,23,42,0.95);
-      color: #cbd5f5;
-      cursor: pointer;
-    }
-
-    .example-chip:hover {
-      border-color: var(--accent);
-    }
-
-    .footnote {
-      margin-top: 18px;
-      font-size: 11px;
-      color: var(--muted);
-      text-align: left;
-    }
-
-    .search-card {
-      background: var(--card);
-      border-radius: 18px;
-      padding: 18px 18px 16px;
-      border: 1px solid var(--border);
-      box-shadow: 0 22px 70px rgba(0,0,0,0.75);
-    }
-
-    .search-title {
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    .input-row input[type="text"] {
-      flex: 1;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid rgba(148,163,184,0.7);
-      background: #020617;
-      color: var(--text);
-      font-size: 14px;
-      outline: none;
-    }
-
-    .input-row input::placeholder {
-      color: #64748b;
-    }
-
-    .btn {
-      padding: 10px 16px;
-      border-radius: 999px;
-      border: none;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.13em;
-      text-transform: uppercase;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      color: #020617;
-      white-space: nowrap;
-    }
-
-    .btn:hover {
-      filter: brightness(1.05);
-    }
-
-    .status-line {
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .error {
-      margin-top: 10px;
-      font-size: 12px;
-      color: var(--danger);
-      background: rgba(127,29,29,0.9);
-      border-radius: 10px;
-      padding: 8px 10px;
-      border: 1px solid rgba(248,113,113,0.8);
-    }
-
-    .results-box {
-      margin-top: 14px;
-      max-height: 360px;
-      overflow: auto;
-      border-radius: 12px;
-      border: 1px solid rgba(51,65,85,0.9);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-
-    thead {
-      background: #020617;
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-
-    th,
-    td {
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(30,41,59,0.9);
-      text-align: left;
-    }
-
-    th {
-      font-weight: 600;
-      color: var(--muted);
-    }
-
-    tbody tr:nth-child(even) {
-      background: rgba(15,23,42,0.8);
-    }
-
-    .download-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 10px;
-      gap: 8px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .download-row form {
-      margin: 0;
-    }
-
-    .download-btn-secondary {
-      padding: 7px 12px;
-      border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.8);
-      background: transparent;
-      color: var(--text);
-      font-size: 11px;
-      font-weight: 500;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      cursor: pointer;
-    }
-
-    .download-btn-secondary:hover {
-      border-color: var(--accent);
-    }
-
-    .tag-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.5);
-      font-size: 10px;
-      color: var(--muted);
-      margin-top: 6px;
-    }
-
-    .tag-pill span {
-      font-size: 12px;
-      color: var(--accent2);
-    }
-
-    a {
-      color: var(--accent);
-    }
-
-    a:hover {
-      text-decoration: underline;
-    }
-  </style>
+        .error {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(127,29,29,0.9);
+            border-radius: 10px;
+            border: 1px solid rgba(248,113,113,0.6);
+            color: #fecaca;
+            font-size: 13px;
+            display: none;
+        }
+    </style>
 </head>
+
 <body>
+
 <div class="shell">
 
-  <div class="top-row">
-    <div class="logo-group">
-      <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
-      <div class="logo"><span>PELÉE</span> AI</div>
-    </div>
-    <div class="pill-small">Internal Data Console</div>
-  </div>
-
-  <div class="main-grid">
-
-    <!-- LEFT: Pitch + Toggle + Examples -->
-    <div>
-      <div class="hero-title">Fast, enriched address & business data in one console.</div>
-      <div class="hero-sub">
-        Residential: county-scale parcels with income & home value.<br>
-        Commercial: live business listings via Google Places.<br>
-        Search in plain English → export or copy results instantly.
-      </div>
-
-      <div class="stat-row">
-        <div class="stat-pill"><strong>150M+</strong> enriched parcels</div>
-        <div class="stat-pill"><strong>3,143</strong> U.S. counties</div>
-        <div class="stat-pill"><strong>Google</strong> business data</div>
-      </div>
-
-      <div class="mode-toggle" id="mode-toggle">
-        <button class="mode-btn active" data-mode="residential" id="btn-residential">
-          Residential
-        </button>
-        <button class="mode-btn" data-mode="commercial" id="btn-commercial">
-          Commercial
-        </button>
-      </div>
-      <div class="mode-caption" id="mode-caption">
-        Residential mode — county-scale U.S. parcels with income & home values.
-      </div>
-
-      <div class="examples">
-        <div class="examples-label">Example queries</div>
-
-        <!-- Residential example chips -->
-        <div class="example-chip-row" id="examples-residential">
-          <div class="example-chip" data-query="$1M–$3M homes in Santa Clara County California">
-            "$1M–$3M homes in Santa Clara County California"
-          </div>
-          <div class="example-chip" data-query="residential addresses in Cuyahoga County Ohio">
-            "residential addresses in Cuyahoga County Ohio"
-          </div>
-          <div class="example-chip" data-query="households earning 250k+ in Fulton County Georgia">
-            "households earning 250k+ in Fulton County Georgia"
-          </div>
+    <!-- HEADER -->
+    <div class="top-row">
+        <div class="logo-group">
+            <img src="{{ url_for('static', filename='3.png') }}" class="logo-img">
+            <div class="logo"><span>PELÉE</span> AI</div>
         </div>
-
-        <!-- Commercial example chips -->
-        <div class="example-chip-row" id="examples-commercial" style="display:none;">
-          <div class="example-chip" data-query="coffee shops in Palo Alto CA">
-            "coffee shops in Palo Alto CA"
-          </div>
-          <div class="example-chip" data-query="pharmacies in Charlotte NC">
-            "pharmacies in Charlotte NC"
-          </div>
-          <div class="example-chip" data-query="McDonalds in Houston Texas">
-            "McDonalds in Houston Texas"
-          </div>
-          <div class="example-chip" data-query="restaurants within 10 miles of Mountain View CA">
-            "restaurants within 10 miles of Mountain View CA"
-          </div>
-        </div>
-      </div>
-
-      <div class="footnote">
-        <div>Residential data: internal CSV pipeline (ACS-enriched).<br>Commercial data: live from Google Places API.</div>
-        <div class="tag-pill">
-          <span>●</span> Enterprise only — do not share outside org.
-        </div>
-      </div>
+        <div class="pill-small">Enterprise Console</div>
     </div>
 
-    <!-- RIGHT: Search + Results -->
-    <div class="search-card">
-      <div class="search-title">Search Console</div>
-
-      <!-- Unified search form -->
-      <form id="search-form" method="POST" action="{{ url_for('search') }}">
-        <div class="input-row">
-          <input
-            id="query-input"
-            name="query"
-            type="text"
-            placeholder="e.g. residential addresses in Wakulla County Florida"
-            value="{{ query or '' }}"
-          />
-          <button class="btn" type="submit">Search</button>
-        </div>
-      </form>
-
-      <!-- Status / errors (Residential side) -->
-      <div id="status-residential">
-        {% if location %}
-          <div class="status-line">
-            Results for <strong>{{ location }}</strong> — showing {{ shown }} of {{ total or 0 }} matches.
-          </div>
-        {% elif total is not none %}
-          <div class="status-line">
-            Showing {{ shown }} of {{ total or 0 }} matches.
-          </div>
-        {% endif %}
-        {% if error %}
-          <div class="error">{{ error }}</div>
-        {% endif %}
-      </div>
-
-      <!-- Status for Commercial (populated via JS) -->
-      <div id="status-commercial" style="display:none;">
-        <div class="status-line" id="commercial-count"></div>
-        <div class="error" id="commercial-error" style="display:none;"></div>
-      </div>
-
-      <!-- RESIDENTIAL RESULTS (server-rendered) -->
-      <div id="residential-results" {% if not results %}style="display:none;"{% endif %}>
-        {% if results %}
-          <div class="results-box">
-            <table>
-              <thead>
-              <tr>
-                <th>Address</th>
-                <th>City</th>
-                <th>State</th>
-                <th>ZIP</th>
-                <th>Income</th>
-                <th>Home Value</th>
-              </tr>
-              </thead>
-              <tbody>
-              {% for r in results %}
-                <tr>
-                  <td>{{ r.address or r["address"] }}</td>
-                  <td>{{ r.city or r["city"] }}</td>
-                  <td>{{ r.state or r["state"] }}</td>
-                  <td>{{ r.zip or r["zip"] }}</td>
-                  <td>
-                    {% if r.income or r["income"] %}
-                      {{ (r.income or r["income"]) | int | string }}
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if r.home_value or r["home_value"] %}
-                      {{ (r.home_value or r["home_value"]) | int | string }}
-                    {% else %}
-                      —
-                    {% endif %}
-                  </td>
-                </tr>
-              {% endfor %}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="download-row">
-            <div>
-              {% if total %}
-                {{ total }} total matching rows in county dataset.
-              {% endif %}
-            </div>
-            {% if download_available %}
-              <form method="POST" action="{{ url_for('download_csv') }}">
-                <input type="hidden" name="query" value="{{ query or '' }}">
-                <button class="download-btn-secondary" type="submit">
-                  Download CSV
-                </button>
-              </form>
-            {% endif %}
-          </div>
-        {% endif %}
-      </div>
-
-      <!-- COMMERCIAL RESULTS (client-rendered) -->
-      <div id="commercial-results" style="display:none;">
-        <div class="results-box">
-          <table>
-            <thead>
-            <tr>
-              <th>Name</th>
-              <th>Address</th>
-              <th>Phone</th>
-              <th>Website</th>
-              <th>Hours</th>
-            </tr>
-            </thead>
-            <tbody id="commercial-tbody"></tbody>
-          </table>
-        </div>
-
-        <div class="download-row">
-          <div>Preview shows up to 10 businesses per search.</div>
-          <button class="download-btn-secondary" type="button" id="commercial-download-btn">
-            Download CSV
-          </button>
-        </div>
-      </div>
-
+    <!-- MODE TOGGLE -->
+    <div class="mode-toggle">
+        <div class="toggle-btn active" id="btn-residential">Residential</div>
+        <div class="toggle-btn" id="btn-commercial">Business Search</div>
     </div>
 
-  </div>
-</div>
+    <!-- SEARCH BOX -->
+    <div class="search-box">
+        <input id="query" placeholder="Enter query…" />
+    </div>
+
+    <!-- EXAMPLES -->
+    <div class="examples-label">Example queries</div>
+    <div class="example-chip-row" id="examples-container">
+        <!-- Filled by JS -->
+    </div>
+
+    <!-- ERROR -->
+    <div class="error" id="error-box"></div>
+
+    <!-- RESULTS TABLES -->
+    <table id="residential-table">
+        <thead>
+        <tr>
+            <th>Address</th>
+            <th>City</th>
+
+…
+            <th>State</th>
+            <th>ZIP</th>
+            <th>Income</th>
+            <th>Home Value</th>
+        </tr>
+        </thead>
+        <tbody id="residential-body"></tbody>
+    </table>
+
+    <!-- COMMERCIAL RESULTS -->
+    <table id="commercial-table">
+        <thead>
+        <tr>
+            <th>Name</th>
+            <th>Address</th>
+            <th>Phone</th>
+            <th>Website</th>
+            <th>Hours</th>
+        </tr>
+        </thead>
+        <tbody id="commercial-body"></tbody>
+    </table>
+
+    <!-- CSV DOWNLOAD -->
+    <form id="download-form" method="POST" action="/download" style="display:none;">
+        <input type="hidden" name="query" id="download-query">
+        <button type="submit" class="download-btn" id="download-btn">Download CSV</button>
+    </form>
+
+</div> <!-- end shell -->
+
+
+<!-- ========================== -->
+<!-- JAVASCRIPT LOGIC           -->
+<!-- ========================== -->
 
 <script>
-  // ---- Mode Toggle ----
-  let currentMode = "residential";
-  const btnResidential = document.getElementById("btn-residential");
-  const btnCommercial = document.getElementById("btn-commercial");
-  const modeCaption = document.getElementById("mode-caption");
+/* -----------------------------
+   TOGGLE BUTTON LOGIC
+--------------------------------*/
+const btnRes = document.getElementById("btn-residential");
+const btnCom = document.getElementById("btn-commercial");
 
-  const examplesResidential = document.getElementById("examples-residential");
-  const examplesCommercial = document.getElementById("examples-commercial");
+const resTable = document.getElementById("residential-table");
+const comTable = document.getElementById("commercial-table");
+const resBody  = document.getElementById("residential-body");
+const comBody  = document.getElementById("commercial-body");
 
-  const statusResidential = document.getElementById("status-residential");
-  const statusCommercial = document.getElementById("status-commercial");
+const downloadForm  = document.getElementById("download-form");
+const downloadBtn   = document.getElementById("download-btn");
+const downloadQuery = document.getElementById("download-query");
 
-  const residentialResults = document.getElementById("residential-results");
-  const commercialResults = document.getElementById("commercial-results");
+const errorBox = document.getElementById("error-box");
+const examplesContainer = document.getElementById("examples-container");
 
-  function setMode(mode) {
-    currentMode = mode;
-    if (mode === "residential") {
-      btnResidential.classList.add("active");
-      btnCommercial.classList.remove("active");
-      modeCaption.textContent =
-        "Residential mode — county-scale U.S. parcels with income & home values.";
+let MODE = "residential"; // default
 
-      examplesResidential.style.display = "flex";
-      examplesCommercial.style.display = "none";
 
-      statusResidential.style.display = "block";
-      statusCommercial.style.display = "none";
 
-      if (residentialResults) {
-        // Jinja will have set display depending on whether results exist
-        residentialResults.style.display = {{ " 'block'" if results else " 'none'" }};
-      }
-      commercialResults.style.display = "none";
-    } else {
-      btnCommercial.classList.add("active");
-      btnResidential.classList.remove("active");
-      modeCaption.textContent =
-        "Commercial mode — live business data from Google Places.";
+/* -----------------------------
+   EXAMPLES PER MODE
+--------------------------------*/
+const EXAMPLES = {
+    residential: [
+        "\"$1M–$3M homes in Santa Clara County California\"",
+        "\"4+ bed SFRs in Palo Alto California built after 2015\"",
+        "\"Households earning $250k+ near Mountain View California\""
+    ],
+    commercial: [
+        "\"Coffee shops in Palo Alto\"",
+        "\"Pharmacies in Sunnyvale\"",
+        "\"Restaurants within 10 miles of Mountain View\""
+    ]
+};
 
-      examplesResidential.style.display = "none";
-      examplesCommercial.style.display = "flex";
-
-      statusResidential.style.display = "none";
-      statusCommercial.style.display = "block";
-
-      residentialResults.style.display = "none";
-      commercialResults.style.display = "block";
-    }
-  }
-
-  btnResidential.addEventListener("click", () => setMode("residential"));
-  btnCommercial.addEventListener("click", () => setMode("commercial"));
-
-  // ---- Example chips: fill query input ----
-  const queryInput = document.getElementById("query-input");
-  document.querySelectorAll(".example-chip").forEach(chip => {
-    chip.addEventListener("click", () => {
-      const q = chip.getAttribute("data-query") || chip.textContent.trim();
-      queryInput.value = q;
+function updateExamples() {
+    examplesContainer.innerHTML = "";
+    EXAMPLES[MODE].forEach(ex => {
+        const chip = document.createElement("div");
+        chip.className = "example-chip";
+        chip.innerText = ex;
+        chip.onclick = () => {
+            document.getElementById("query").value = ex.replace(/"/g, "");
+        };
+        examplesContainer.appendChild(chip);
     });
-  });
+}
 
-  // ---- Commercial search via fetch ----
-  let lastCommercialResults = [];
 
-  async function runCommercialSearch() {
-    const q = queryInput.value.trim();
-    const statusText = document.getElementById("commercial-count");
-    const errorBox = document.getElementById("commercial-error");
-    const tbody = document.getElementById("commercial-tbody");
 
-    if (!q) return;
+/* -----------------------------
+   SWITCH BETWEEN MODES
+--------------------------------*/
+btnRes.onclick = () => {
+    MODE = "residential";
+    btnRes.classList.add("active");
+    btnCom.classList.remove("active");
 
-    statusText.textContent = "Searching Google Places…";
+    resTable.style.display = "none";
+    comTable.style.display = "none";
+    downloadForm.style.display = "none";
     errorBox.style.display = "none";
-    errorBox.textContent = "";
-    tbody.innerHTML = "";
-    lastCommercialResults = [];
 
+    updateExamples();
+};
+
+btnCom.onclick = () => {
+    MODE = "commercial";
+    btnCom.classList.add("active");
+    btnRes.classList.remove("active");
+
+    resTable.style.display = "none";
+    comTable.style.display = "none";
+    downloadForm.style.display = "none";
+    errorBox.style.display = "none";
+
+    updateExamples();
+};
+
+updateExamples(); // initialize
+
+
+
+/* -----------------------------
+   RUN SEARCH
+--------------------------------*/
+async function runSearch() {
+    errorBox.style.display = "none";
+    resTable.style.display = "none";
+    comTable.style.display = "none";
+    downloadForm.style.display = "none";
+
+    const query = document.getElementById("query").value.trim();
+    if (!query) {
+        return showError("Please enter a query.");
+    }
+
+    if (MODE === "residential") {
+        await searchResidential(query);
+    } else {
+        await searchCommercial(query);
+    }
+}
+
+document.getElementById("query").addEventListener("keypress", function (e) {
+    if (e.key === "Enter") runSearch();
+});
+
+
+
+/* -----------------------------
+   RESIDENTIAL SEARCH (AJAX)
+--------------------------------*/
+async function searchResidential(query) {
     try {
-      const res = await fetch("{{ url_for('commercial_search') }}", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({query: q})
-      });
+        const res = await fetch("/search", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ query: query })
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok || data.error) {
-        throw new Error(data.error || ("HTTP " + res.status));
-      }
-
-      statusText.textContent = `Showing ${data.preview_count} of ~${data.total_count} Google results`;
-
-      lastCommercialResults = data.preview || [];
-      if (!lastCommercialResults.length) {
-        tbody.innerHTML = "<tr><td colspan='5'>No businesses found for that search.</td></tr>";
-        return;
-      }
-
-      for (const row of lastCommercialResults) {
-        const tr = document.createElement("tr");
-        const websiteCell =
-          row.Website && row.Website !== "N/A"
-            ? `<a href="${row.Website}" target="_blank" rel="noopener noreferrer">Website</a>`
-            : "N/A";
-        tr.innerHTML = `
-          <td>${row.Name || ""}</td>
-          <td>${row.Address || ""}</td>
-          <td>${row.Phone || ""}</td>
-          <td>${websiteCell}</td>
-          <td>${row.Hours || ""}</td>
-        `;
-        tbody.appendChild(tr);
-      }
-    } catch (err) {
-      console.error(err);
-      statusText.textContent = "";
-      errorBox.textContent = "Error searching Google: " + err.message;
-      errorBox.style.display = "block";
-    }
-  }
-
-  // Intercept form submit in Commercial mode
-  const searchForm = document.getElementById("search-form");
-  searchForm.addEventListener("submit", function (e) {
-    if (currentMode === "commercial") {
-      e.preventDefault();
-      runCommercialSearch();
-    }
-    // If residential, let the normal POST happen (server-rendered results).
-  });
-
-  // ---- Commercial CSV download (client-side) ----
-  const commercialDownloadBtn = document.getElementById("commercial-download-btn");
-  commercialDownloadBtn.addEventListener("click", () => {
-    if (!lastCommercialResults.length) return;
-
-    const header = ["Name","Address","Phone","Website","Hours"];
-    const rows = lastCommercialResults.map(r => [
-      r.Name || "",
-      r.Address || "",
-      r.Phone || "",
-      r.Website || "",
-      r.Hours || ""
-    ]);
-
-    let csv = header.join(",") + "\n";
-    for (const row of rows) {
-      const escaped = row.map(value => {
-        const v = (value || "").toString();
-        if (v.includes(",") || v.includes('"') || v.includes("\n")) {
-          return '"' + v.replace(/"/g, '""') + '"';
+        if (!data.ok) {
+            return showError(data.error || "No results.");
         }
-        return v;
-      });
-      csv += escaped.join(",") + "\n";
+
+        // Fill table
+        resBody.innerHTML = "";
+
+        data.results.forEach(row => {
+            const tr = document.createElement("tr");
+
+            tr.innerHTML = `
+                <td>${row.address || ""}</td>
+                <td>${row.city || ""}</td>
+                <td>${row.state || ""}</td>
+                <td>${row.zip || ""}</td>
+                <td>${row.income ?? ""}</td>
+                <td>${row.home_value ?? ""}</td>
+            `;
+
+            resBody.appendChild(tr);
+        });
+
+        resTable.style.display = "table";
+
+        // Setup CSV download
+        downloadQuery.value = query;
+        downloadForm.style.display = "block";
+
+    } catch (err) {
+        showError("Server error: " + err);
     }
+}
 
-    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "commercial_results.csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
 
-  // Default: Residential mode (matches backend behavior)
-  setMode("residential");
+
+/* -----------------------------
+   COMMERCIAL SEARCH (AJAX)
+--------------------------------*/
+async function searchCommercial(query) {
+    try {
+        const res = await fetch("/commercial_search", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ query: query })
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+            return showError(data.error || "No results.");
+        }
+
+        comBody.innerHTML = "";
+
+        data.results.forEach(r => {
+            const tr = document.createElement("tr");
+
+            tr.innerHTML = `
+                <td>${r.Name || ""}</td>
+                <td>${r.Address || ""}</td>
+                <td>${r.Phone || ""}</td>
+                <td>${r.Website !== "N/A" ? `<a href="${r.Website}" target="_blank">Website</a>` : "N/A"}</td>
+                <td>${r.Hours || ""}</td>
+            `;
+
+            comBody.appendChild(tr);
+        });
+
+        comTable.style.display = "table";
+
+    } catch (err) {
+        showError("Server error: " + err);
+    }
+}
+
+
+
+/* -----------------------------
+   ERROR DISPLAY
+--------------------------------*/
+function showError(msg) {
+    errorBox.innerText = msg;
+    errorBox.style.display = "block";
+}
+
 </script>
+
 </body>
 </html>
+
