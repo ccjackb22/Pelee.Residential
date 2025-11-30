@@ -609,8 +609,10 @@
       statusResidential.style.display = "block";
       statusCommercial.style.display = "none";
 
-      // Show any existing residential results, hide commercial
-      if (residentialResults) residentialResults.style.display = "{{ results and 'block' or 'none' }}";
+      if (residentialResults) {
+        // Jinja will have set display depending on whether results exist
+        residentialResults.style.display = {{ " 'block'" if results else " 'none'" }};
+      }
       commercialResults.style.display = "none";
     } else {
       btnCommercial.classList.add("active");
