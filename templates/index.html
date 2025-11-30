@@ -17,9 +17,7 @@
             --danger: #fecaca;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -64,10 +62,7 @@
             font-size: 20px;
             letter-spacing: 0.16em;
         }
-
-        .logo span {
-            color: var(--accent);
-        }
+        .logo span { color: var(--accent); }
 
         .tagline {
             font-size: 13px;
@@ -136,6 +131,30 @@
             background: rgba(15,23,42,0.85);
         }
 
+        .mode-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .mode-pill {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            border-radius: 999px;
+            padding: 6px 14px;
+            border: 1px solid rgba(148,163,184,0.7);
+            background: rgba(15,23,42,0.9);
+            color: var(--text-muted);
+            text-decoration: none;
+        }
+
+        .mode-pill.active {
+            border-color: rgba(56,189,248,0.95);
+            background: rgba(15,23,42,1);
+            color: #e5e7eb;
+        }
+
         .search-row {
             display: flex;
             flex-direction: column;
@@ -165,9 +184,7 @@
             outline: none;
         }
 
-        .search-input::placeholder {
-            color: var(--text-muted);
-        }
+        .search-input::placeholder { color: var(--text-muted); }
 
         .search-icon {
             position: absolute;
@@ -189,12 +206,9 @@
             cursor: pointer;
             background: linear-gradient(90deg, #0ea5e9, #22c55e);
             color: #020617;
-            white-space: nowrap;
         }
 
-        .btn-primary:hover {
-            filter: brightness(1.05);
-        }
+        .btn-primary:hover { filter: brightness(1.05); }
 
         .hint-row {
             margin-top: 6px;
@@ -231,29 +245,7 @@
             margin-bottom: 8px;
         }
 
-        .results-header strong {
-            color: #e5e7eb;
-        }
-
-        .download-form {
-            margin: 0;
-        }
-
-        .btn-secondary {
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.9);
-            background: rgba(15,23,42,0.9);
-            color: var(--text-muted);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            padding: 6px 12px;
-            cursor: pointer;
-        }
-
-        .btn-secondary:hover {
-            color: #e5e7eb;
-        }
+        .results-header strong { color: #e5e7eb; }
 
         .results-table-wrap {
             border-radius: 12px;
@@ -285,11 +277,9 @@
         .results-table tbody tr:nth-child(even) {
             background: rgba(15,23,42,0.85);
         }
-
         .results-table tbody tr:nth-child(odd) {
             background: rgba(15,23,42,0.93);
         }
-
         .results-table tbody tr:hover {
             background: rgba(15,23,42,1);
         }
@@ -315,32 +305,6 @@
             font-size: 11px;
             color: var(--text-muted);
         }
-
-        .mode-row {
-            display: inline-flex;
-            gap: 6px;
-            margin-bottom: 8px;
-        }
-
-        .mode-pill {
-            font-size: 11px;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.7);
-            padding: 4px 10px;
-            background: rgba(15,23,42,0.9);
-            color: var(--text-muted);
-            cursor: pointer;
-        }
-
-        .mode-pill.active {
-            border-color: rgba(56,189,248,0.9);
-            background: rgba(15,23,42,1);
-            color: #e5e7eb;
-        }
-
-        .mode-row input { display:none; }
     </style>
 </head>
 
@@ -368,20 +332,20 @@
                 <div class="pill">Instant CSV export</div>
             </div>
 
-            <form method="POST" action="{{ url_for('search') }}">
-                <div class="mode-row">
-                    <label class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="residential"
-                               {% if mode != 'commercial' %}checked{% endif %}>
-                        Residential
-                    </label>
-                    <label class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="commercial"
-                               {% if mode == 'commercial' %}checked{% endif %}>
-                        Commercial
-                    </label>
-                </div>
+            <!-- MODE SWITCH (GET LINKS, NOT RADIO BUTTONS) -->
+            <div class="mode-row">
+                <a href="/?mode=residential"
+                   class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
+                    Residential
+                </a>
+                <a href="/?mode=commercial"
+                   class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
+                    Commercial
+                </a>
+            </div>
 
+            <!-- SEARCH FORM -->
+            <form method="POST" action="{{ url_for('search', mode=mode) }}">
                 <div class="search-row">
                     <div class="search-input-wrap">
                         <span class="search-icon">🔍</span>
@@ -411,15 +375,12 @@
                 {% endif %}
             </div>
 
-            {% if error %}
-            <div class="error">{{ error }}</div>
-            {% endif %}
-            {% if commercial_error %}
-            <div class="error">{{ commercial_error }}</div>
-            {% endif %}
+            {% if error %}<div class="error">{{ error }}</div>{% endif %}
+            {% if commercial_error %}<div class="error">{{ commercial_error }}</div>{% endif %}
         </section>
 
         {% if mode == 'residential' %}
+
         <!-- RESIDENTIAL RESULTS -->
         <section class="panel">
             <div class="results-header">
@@ -456,46 +417,39 @@
                         </tr>
                     </thead>
                     <tbody>
-
-                    {% if results %}
-                        {% for r in results %}
-                        <tr>
-                            <td>{{ r.address }}</td>
-                            <td>{{ r.number }}</td>
-                            <td>{{ r.street }}</td>
-                            <td>{{ r.city }}</td>
-                            <td>{{ r.state }}</td>
-                            <td>{{ r.zip }}</td>
-
-                            <td>
-                                {% if r.income %}
-                                    <span class="metric-pill income">
-                                        ${{ "{:,.0f}".format(r.income) }}
-                                    </span>
-                                {% endif %}
-                            </td>
-
-                            <td>
-                                {% if r.home_value %}
-                                    <span class="metric-pill">
-                                        ${{ "{:,.0f}".format(r.home_value) }}
-                                    </span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr>
-                            <td colspan="8" style="text-align:center; color:var(--text-muted); padding:10px;">
-                                {% if location %}
-                                    No preview results.
-                                {% else %}
-                                    Waiting for a search query.
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% endif %}
-
+                        {% if results %}
+                            {% for r in results %}
+                            <tr>
+                                <td>{{ r.address }}</td>
+                                <td>{{ r.number }}</td>
+                                <td>{{ r.street }}</td>
+                                <td>{{ r.city }}</td>
+                                <td>{{ r.state }}</td>
+                                <td>{{ r.zip }}</td>
+                                <td>
+                                    {% if r.income %}
+                                        <span class="metric-pill income">
+                                            ${{ "{:,.0f}".format(r.income) }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if r.home_value %}
+                                        <span class="metric-pill">
+                                            ${{ "{:,.0f}".format(r.home_value) }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" style="text-align:center; color:var(--text-muted); padding:10px;">
+                                    {% if location %}No preview results.
+                                    {% else %}Waiting for a search query.{% endif %}
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -507,6 +461,7 @@
         </section>
 
         {% else %}
+
         <!-- COMMERCIAL RESULTS -->
         <section class="panel">
             <div class="results-header">
@@ -514,11 +469,8 @@
                     Showing <strong>{{ commercial_results|length }}</strong> results for
                     <strong>{{ query }}</strong>
                 {% else %}
-                    {% if query %}
-                        No commercial results found.
-                    {% else %}
-                        No search run yet.
-                    {% endif %}
+                    {% if query %}No commercial results found.
+                    {% else %}No search run yet.{% endif %}
                 {% endif %}
             </div>
 
@@ -534,29 +486,31 @@
                         </tr>
                     </thead>
                     <tbody>
-
-                    {% if commercial_results %}
-                        {% for r in commercial_results %}
-                        <tr>
-                            <td>{{ r.Name }}</td>
-                            <td>{{ r.Address }}</td>
-                            <td>{{ r.Phone }}</td>
-                            <td>
-                                {% if r.Website != "N/A" %}
-                                    <a href="{{ r.Website }}" style="color:#93c5fd;" target="_blank">Website</a>
-                                {% else %} N/A {% endif %}
-                            </td>
-                            <td>{{ r.Hours }}</td>
-                        </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr>
-                            <td colspan="5" style="text-align:center; color:var(--text-muted); padding:10px;">
-                                No results.
-                            </td>
-                        </tr>
-                    {% endif %}
-
+                        {% if commercial_results %}
+                            {% for r in commercial_results %}
+                            <tr>
+                                <td>{{ r.Name }}</td>
+                                <td>{{ r.Address }}</td>
+                                <td>{{ r.Phone }}</td>
+                                <td>
+                                    {% if r.Website != "N/A" %}
+                                        <a href="{{ r.Website }}" style="color:#93c5fd;" target="_blank">
+                                            Website
+                                        </a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.Hours }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" style="text-align:center; color:var(--text-muted); padding:10px;">
+                                    No results.
+                                </td>
+                            </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
@@ -565,6 +519,7 @@
                 Commercial lookups are powered by Google Places.
             </div>
         </section>
+
         {% endif %}
 
     </main>
