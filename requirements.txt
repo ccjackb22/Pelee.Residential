@@ -4,3 +4,4 @@ boto3
 python-dotenv
 httpx==0.25.2
 openai==1.55.3
+requests
