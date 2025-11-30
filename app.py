@@ -7,6 +7,7 @@ import csv
 import io
 from datetime import datetime
 
+import requests
 import boto3
 from botocore.config import Config
 from flask import (
@@ -20,7 +21,6 @@ from flask import (
     Response,
 )
 from dotenv import load_dotenv
-import requests  # NEW: for Google Places API
 
 # -------------------------------------------------------------------
 # ENV + LOGGING SETUP
@@ -42,13 +42,16 @@ AWS_REGION = (
 )
 
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
-S3_PREFIX = os.getenv("S3_PREFIX", "").strip()  # IMPORTANT: leave this empty in Render
+S3_PREFIX = os.getenv("S3_PREFIX", "").strip()  # leave empty on Render
 
 ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD", "Charlotte69")
 SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(24).hex()
 
-# Google Places API key (prefer GOOGLE_API_KEY, fall back to GOOGLE_MAPS_API_KEY)
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY")
+# Google Maps / Places
+GOOGLE_MAPS_API_KEY = (
+    os.getenv("GOOGLE_MAPS_API_KEY")
+    or os.getenv("GOOGLE_API_KEY")
+)
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY
@@ -179,7 +182,7 @@ def normalize_county_name(name: str | None) -> str | None:
 # BOOT: BUILD COUNTY INDEX FROM S3 (CSV FILES)
 # -------------------------------------------------------------------
 
-def build_county_index():
+def build_county_index() -> None:
     """
     Scan S3 once on boot and map:
       (state, normalized_county) -> {key, size, raw_name}
@@ -314,8 +317,8 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
             val *= 1_000_000
         return val
 
-    min_income = None
-    min_value = None
+    min_income: float | None = None
+    min_value: float | None = None
 
     # pattern: "over 200k", "over 500000"
     m_over = re.search(r"over\s+(\d+(?:\.\d+)?)(k|m)?", q)
@@ -345,11 +348,6 @@ def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
 # -------------------------------------------------------------------
 
 def get_income(row: dict) -> float | None:
-    """
-    Try multiple possible ACS income keys.
-    With your pipeline we expect 'median_income', but also support
-    other common names.
-    """
     candidate_keys = [
         "income",
         "median_income",
@@ -372,10 +370,6 @@ def get_income(row: dict) -> float | None:
 
 
 def get_home_value(row: dict) -> float | None:
-    """
-    Try multiple possible home value keys.
-    With your pipeline we expect 'median_home_value'.
-    """
     candidate_keys = [
         "home_value",
         "median_home_value",
@@ -397,12 +391,6 @@ def get_home_value(row: dict) -> float | None:
 
 
 def extract_basic_fields(row: dict) -> dict:
-    """
-    Extract core address fields from a CSV row.
-    The addresses_enriched_acs files use:
-      NUMBER, STREET, CITY, REGION, POSTCODE
-    """
-
     def first(*keys):
         for k in keys:
             if not k:
@@ -424,7 +412,6 @@ def extract_basic_fields(row: dict) -> dict:
     )
     street = first("STREET", "street", "addr:street", "ROAD", "RD_NAME")
     city = first("CITY", "city", "City")
-    # REGION is your 2-letter state code in the addresses CSVs
     state = first("REGION", "state", "STATE", "ST", "STUSPS", "STATE_NAME")
     postal = first("POSTCODE", "postal_code", "zip", "ZIP", "ZIPCODE", "ZIP_CODE")
 
@@ -575,10 +562,6 @@ def apply_filters_iter(
 # -------------------------------------------------------------------
 
 def load_county_rows(state_code: str, county_norm: str) -> tuple[list[dict] | None, dict | None]:
-    """
-    Find the S3 key for (state, county) from COUNTY_INDEX and
-    load its CSV rows into memory for preview.
-    """
     state_code = state_code.lower()
     county_norm = county_norm.lower()
 
@@ -628,10 +611,88 @@ def load_county_rows(state_code: str, county_norm: str) -> tuple[list[dict] | No
 # AUTH HELPERS
 # -------------------------------------------------------------------
 
-def require_login():
-    if not session.get("authenticated"):
-        return False
-    return True
+def require_login() -> bool:
+    return bool(session.get("authenticated"))
+
+
+# -------------------------------------------------------------------
+# GOOGLE PLACES COMMERCIAL SEARCH
+# -------------------------------------------------------------------
+
+def google_places_search(query: str, max_results: int = 10) -> tuple[bool, str | None, list[dict]]:
+    if not GOOGLE_MAPS_API_KEY:
+        return False, "Google Maps API key not configured", []
+
+    try:
+        params = {
+            "query": query,
+            "key": GOOGLE_MAPS_API_KEY,
+        }
+        r = requests.get(
+            "https://maps.googleapis.com/maps/api/place/textsearch/json",
+            params=params,
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        status = data.get("status")
+        if status not in ("OK", "ZERO_RESULTS"):
+            msg = data.get("error_message") or status
+            return False, f"Google Places error: {msg}", []
+
+        results = data.get("results", [])[:max_results]
+        out: list[dict] = []
+
+        for place in results:
+            place_id = place.get("place_id")
+            name = place.get("name")
+            address = place.get("formatted_address")
+
+            phone = "N/A"
+            website = "N/A"
+            hours_str = ""
+
+            if place_id:
+                try:
+                    details_params = {
+                        "place_id": place_id,
+                        "fields": "formatted_phone_number,website,opening_hours",
+                        "key": GOOGLE_MAPS_API_KEY,
+                    }
+                    dr = requests.get(
+                        "https://maps.googleapis.com/maps/api/place/details/json",
+                        params=details_params,
+                        timeout=10,
+                    )
+                    dr.raise_for_status()
+                    ddata = dr.json()
+                    if ddata.get("status") == "OK":
+                        det = ddata.get("result", {})
+                        phone = det.get("formatted_phone_number") or "N/A"
+                        website = det.get("website") or "N/A"
+                        opening = det.get("opening_hours", {})
+                        weekday = opening.get("weekday_text")
+                        if isinstance(weekday, list):
+                            hours_str = "; ".join(weekday)
+                except Exception as e:
+                    logging.warning("Places details error for %s: %s", place_id, e)
+
+            out.append(
+                {
+                    "Name": name or "",
+                    "Address": address or "",
+                    "Phone": phone,
+                    "Website": website,
+                    "Hours": hours_str,
+                }
+            )
+
+        return True, None, out
+
+    except Exception as e:
+        logging.exception("Google Places search failed")
+        return False, str(e), []
 
 
 # -------------------------------------------------------------------
@@ -645,10 +706,10 @@ def health():
             "ok": True,
             "time": int(time.time()),
             "env_aws_id": bool(AWS_ACCESS_KEY_ID),
-            "env_openai": bool(os.getenv("OPENAI_API_KEY")),
             "bucket": S3_BUCKET,
             "prefix": S3_PREFIX,
             "indexed_states": len(COUNTY_INDEX),
+            "google_configured": bool(GOOGLE_MAPS_API_KEY),
         }
     )
 
@@ -680,80 +741,50 @@ def logout():
 def index():
     if not require_login():
         return redirect(url_for("login"))
-
-    return render_template(
-        "index.html",
-        query="",
-        location=None,
-        dataset_key=None,
-        results=[],
-        total=None,
-        shown=0,
-        error=None,
-        download_available=False,
-    )
+    return render_template("index.html")
 
 
+# -----------------------------
+# RESIDENTIAL SEARCH (JSON API)
+# -----------------------------
 @app.route("/search", methods=["POST"])
 def search():
     if not require_login():
-        return redirect(url_for("login"))
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
 
-    query = (request.form.get("query") or "").strip()
-    logging.info("[SEARCH] Incoming query='%s'", query)
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or "").strip()
+    logging.info("[SEARCH] Residential query='%s'", query)
 
     if not query:
-        return render_template(
-            "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total=None,
-            shown=0,
-            error="Please enter a search query with a county and state.",
-            download_available=False,
-        )
+        return jsonify({"ok": False, "error": "Please enter a search query."}), 400
 
-    # 1) Parse location (county + state)
     state_code, county_norm = parse_query_location(query)
     if not state_code or not county_norm:
         logging.info("[RESOLVE] Failed to parse state/county from query.")
-        return render_template(
-            "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total=None,
-            shown=0,
-            error=(
-                "Couldn't resolve a (county, state) from that query. "
-                "Include BOTH the exact county name, the word 'County', and the full state name. "
-                "Example: 'residential addresses in Wakulla County Florida'."
-            ),
-            download_available=False,
-        )
+        return jsonify(
+            {
+                "ok": False,
+                "error": (
+                    "Couldn't resolve a (county, state) from that query. "
+                    "Include BOTH the exact county name, the word 'County', and the full state name. "
+                    "Example: 'residential addresses in Wakulla County Florida'."
+                ),
+            }
+        ), 400
 
-    # 2) Load rows from S3
     rows, meta = load_county_rows(state_code, county_norm)
     if rows is None or meta is None:
-        return render_template(
-            "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total=None,
-            shown=0,
-            error=(
-                f"Couldn't find a dataset for {county_norm.title()} County, "
-                f"{state_code.upper()} in S3."
-            ),
-            download_available=False,
-        )
+        return jsonify(
+            {
+                "ok": False,
+                "error": (
+                    f"Couldn't find a dataset for {county_norm.title()} County, "
+                    f"{state_code.upper()} in S3."
+                ),
+            }
+        ), 404
 
-    # 3) Parse filters (income/value)
     min_income, min_value = parse_numeric_filters(query)
     q_lower = query.lower()
     filter_residential = (
@@ -763,7 +794,6 @@ def search():
         or ("house" in q_lower)
     )
 
-    # 4) Apply filters for preview only
     start = time.time()
     preview_results, matches, scanned = apply_filters_iter(
         rows,
@@ -775,51 +805,62 @@ def search():
     )
     elapsed = time.time() - start
 
-    total = matches
-    shown = len(preview_results)
-
     logging.info(
-        "[RESULTS] query='%s' state=%s county=%s total=%d shown=%d scanned=%d time=%.2fs",
+        "[RESULTS] res query='%s' state=%s county=%s total=%d shown=%d scanned=%d time=%.2fs",
         query,
         state_code,
         county_norm,
-        total,
-        shown,
+        matches,
+        len(preview_results),
         scanned,
         elapsed,
     )
 
-    location_label = f"{county_norm.title()} County, {state_code.upper()}"
-
-    if total == 0:
-        error_msg = (
-            "No matching addresses found for that filter. "
-            "Try removing any income/value filters or double-checking the county + state."
-        )
-    else:
-        error_msg = None
-
-    return render_template(
-        "index.html",
-        query=query,
-        location=location_label,
-        dataset_key=meta["key"],
-        results=preview_results,
-        total=total,
-        shown=shown,
-        error=error_msg,
-        download_available=shown > 0,
+    return jsonify(
+        {
+            "ok": True,
+            "location": f"{county_norm.title()} County, {state_code.upper()}",
+            "total": matches,
+            "shown": len(preview_results),
+            "results": preview_results,
+        }
     )
 
 
+# -----------------------------
+# COMMERCIAL SEARCH (JSON API)
+# -----------------------------
+@app.route("/commercial_search", methods=["POST"])
+def commercial_search():
+    if not require_login():
+        return jsonify({"ok": False, "error": "Not authenticated"}), 401
+
+    data = request.get_json(silent=True) or {}
+    query = (data.get("query") or "").strip()
+    logging.info("[SEARCH] Commercial query='%s'", query)
+
+    if not query:
+        return jsonify({"ok": False, "error": "Please enter a search query."}), 400
+
+    ok, error_msg, results = google_places_search(query, max_results=10)
+    if not ok:
+        return jsonify({"ok": False, "error": error_msg}), 500
+
+    return jsonify(
+        {
+            "ok": True,
+            "total_count": len(results),
+            "preview_count": len(results),
+            "results": results,
+        }
+    )
+
+
+# -----------------------------
+# RESIDENTIAL CSV DOWNLOAD
+# -----------------------------
 @app.route("/download", methods=["POST"])
 def download_csv():
-    """
-    Stream a full CSV of all matching rows for the given query.
-    Includes:
-      - address, city, state, zip, income, home_value
-      - all original columns from the county CSV
-    """
     if not require_login():
         return redirect(url_for("login"))
 
@@ -830,53 +871,27 @@ def download_csv():
     state_code, county_norm = parse_query_location(query)
     if not state_code or not county_norm:
         logging.info("[DOWNLOAD] Failed to parse state/county from query='%s'", query)
-        return render_template(
-            "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total=None,
-            shown=0,
-            error=(
-                "Couldn't resolve a (county, state) from that query for CSV export. "
-                "Include BOTH the exact county name, the word 'County', and the full state name."
-            ),
-            download_available=False,
-        )
+        return redirect(url_for("index"))
 
-    # Resolve S3 key via index
     state_map = COUNTY_INDEX.get(state_code.lower())
     meta = None
     if state_map:
         meta = state_map.get(county_norm.lower())
         if not meta:
             for cand_norm, cand_meta in state_map.items():
-                if cand_norm == county_norm.lower() or \
-                   county_norm.lower() in cand_norm or \
-                   cand_norm in county_norm.lower():
+                if (
+                    cand_norm == county_norm.lower()
+                    or county_norm.lower() in cand_norm
+                    or cand_norm in county_norm.lower()
+                ):
                     meta = cand_meta
                     break
 
     if not meta:
-        return render_template(
-            "index.html",
-            query=query,
-            location=None,
-            dataset_key=None,
-            results=[],
-            total=None,
-            shown=0,
-            error=(
-                f"Couldn't find a dataset for {county_norm.title()} County, "
-                f"{state_code.upper()} for CSV export."
-            ),
-            download_available=False,
-        )
+        return redirect(url_for("index"))
 
     key = meta["key"]
 
-    # Same filter semantics as preview, but we stream the whole file
     min_income, min_value = parse_numeric_filters(query)
     q_lower = query.lower()
     filter_residential = (
@@ -964,124 +979,9 @@ def download_csv():
 
 
 # -------------------------------------------------------------------
-# COMMERCIAL SEARCH (Google Places)
-# -------------------------------------------------------------------
-
-@app.route("/commercial_search", methods=["POST"])
-def commercial_search():
-    """
-    Google Places-backed business search.
-    Expects JSON: { "query": "coffee shops in Palo Alto" }
-
-    Returns JSON:
-      {
-        "preview_count": N,
-        "total_count": M,
-        "preview": [
-          {"Name": ..., "Address": ..., "Phone": ..., "Website": ..., "Hours": ...},
-          ...
-        ]
-      }
-    """
-    if not require_login():
-        return jsonify({"error": "Unauthorized"}), 401
-
-    if not GOOGLE_API_KEY:
-        logging.error("[COMMERCIAL] GOOGLE_API_KEY / GOOGLE_MAPS_API_KEY not configured.")
-        return jsonify({"error": "Google API key not configured on server."}), 500
-
-    data = request.get_json(silent=True) or {}
-    query = (data.get("query") or request.form.get("query") or "").strip()
-    if not query:
-        return jsonify({"error": "Empty query"}), 400
-
-    logging.info("[COMMERCIAL] Incoming query='%s'", query)
-
-    try:
-        # 1) Text Search
-        params = {
-            "query": query,
-            "key": GOOGLE_API_KEY,
-        }
-        resp = requests.get(
-            "https://maps.googleapis.com/maps/api/place/textsearch/json",
-            params=params,
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            logging.error("[COMMERCIAL] Text search HTTP %s", resp.status_code)
-            return jsonify({"error": f"Google Places HTTP {resp.status_code}"}), 502
-
-        payload = resp.json()
-        status = payload.get("status")
-        if status not in ("OK", "ZERO_RESULTS"):
-            logging.error("[COMMERCIAL] Places status=%s, error_message=%s",
-                          status, payload.get("error_message"))
-            return jsonify({
-                "error": f"Google Places error: {status} {payload.get('error_message','')}"
-            }), 502
-
-        results = payload.get("results", [])
-        total_count = len(results)
-        preview_places = results[:10]  # keep details calls bounded
-
-        preview = []
-        for place in preview_places:
-            place_id = place.get("place_id")
-            name = place.get("name") or ""
-            address = place.get("formatted_address") or ""
-
-            phone = ""
-            website = ""
-            hours_str = ""
-
-            if place_id:
-                try:
-                    details_params = {
-                        "place_id": place_id,
-                        "fields": "formatted_phone_number,website,opening_hours",
-                        "key": GOOGLE_API_KEY,
-                    }
-                    d_resp = requests.get(
-                        "https://maps.googleapis.com/maps/api/place/details/json",
-                        params=details_params,
-                        timeout=10,
-                    )
-                    if d_resp.status_code == 200:
-                        d_payload = d_resp.json()
-                        d_status = d_payload.get("status")
-                        if d_status == "OK":
-                            result = d_payload.get("result", {})
-                            phone = result.get("formatted_phone_number") or ""
-                            website = result.get("website") or ""
-                            weekday_text = (result.get("opening_hours") or {}).get("weekday_text") or []
-                            hours_str = "; ".join(weekday_text)
-                except Exception as e:
-                    logging.warning("[COMMERCIAL] Details error for place_id=%s: %s", place_id, e)
-
-            preview.append({
-                "Name": name,
-                "Address": address,
-                "Phone": phone or "N/A",
-                "Website": website or "N/A",
-                "Hours": hours_str or "",
-            })
-
-        return jsonify({
-            "preview_count": len(preview),
-            "total_count": total_count,
-            "preview": preview,
-        })
-
-    except Exception as e:
-        logging.exception("[COMMERCIAL] Unexpected error: %s", e)
-        return jsonify({"error": f"Unexpected error: {e}"}), 500
-
-
-# -------------------------------------------------------------------
 # ENTRYPOINT
 # -------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # For local testing only; Render uses gunicorn app:app
+    # For local testing; Render uses gunicorn app:app
     app.run(host="0.0.0.0", port=5000, debug=True)
