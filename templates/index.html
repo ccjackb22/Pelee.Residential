@@ -332,6 +332,7 @@
             background: rgba(15,23,42,0.9);
             color: var(--text-muted);
             cursor: pointer;
+            text-decoration: none;
         }
 
         .mode-pill.active {
@@ -339,8 +340,6 @@
             background: rgba(15,23,42,1);
             color: #e5e7eb;
         }
-
-        .mode-row input { display:none; }
     </style>
 </head>
 
@@ -368,19 +367,21 @@
                 <div class="pill">Instant CSV export</div>
             </div>
 
+            <!-- mode pills = GET links -->
+            <div class="mode-row">
+                <a href="{{ url_for('index', mode='residential') }}"
+                   class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
+                    Residential
+                </a>
+                <a href="{{ url_for('index', mode='commercial') }}"
+                   class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
+                    Commercial
+                </a>
+            </div>
+
             <form method="POST" action="{{ url_for('search') }}">
-                <div class="mode-row">
-                    <label class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="residential"
-                               {% if mode != 'commercial' %}checked{% endif %}>
-                        Residential
-                    </label>
-                    <label class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="commercial"
-                               {% if mode == 'commercial' %}checked{% endif %}>
-                        Commercial
-                    </label>
-                </div>
+                <!-- always post the current mode -->
+                <input type="hidden" name="mode" value="{{ mode }}"/>
 
                 <div class="search-row">
                     <div class="search-input-wrap">
@@ -411,7 +412,6 @@
                 {% endif %}
             </div>
 
-            <!-- FIXED ERROR HANDLING -->
             {% if mode == 'residential' and error %}
                 <div class="error">{{ error }}</div>
             {% endif %}
