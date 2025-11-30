@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <title>PELÉE AI | Address Search</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-
     <style>
         :root {
             --bg: #020617;
@@ -18,13 +17,16 @@
             --danger: #fecaca;
         }
 
-        * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
 
         body {
             margin: 0;
             min-height: 100vh;
-            font-family: system-ui, -apple-system, "Inter", sans-serif;
-            background: radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+            background:
+                radial-gradient(circle at top, #1e293b 0, #020617 55%, #000 100%);
             color: var(--text-main);
             display: flex;
             justify-content: center;
@@ -34,10 +36,9 @@
         .shell {
             width: 100%;
             max-width: 1040px;
-            background:
-                radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 55%),
-                radial-gradient(circle at top right, rgba(34,197,94,0.05), transparent 55%),
-                rgba(15,23,42,0.98);
+            background: radial-gradient(circle at top left, rgba(56,189,248,0.1), transparent 55%),
+                        radial-gradient(circle at top right, rgba(34,197,94,0.05), transparent 55%),
+                        rgba(15,23,42,0.98);
             border-radius: 20px;
             padding: 22px 22px 20px;
             border: 1px solid rgba(148,163,184,0.5);
@@ -52,10 +53,36 @@
             margin-bottom: 18px;
         }
 
-        .brand-block { display: flex; flex-direction: column; gap: 4px; }
-        .logo { font-weight: 700; font-size: 20px; letter-spacing: 0.16em; }
-        .logo span { color: var(--accent); }
-        .tagline { font-size: 13px; color: var(--text-muted); }
+        .brand-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 20px;
+            letter-spacing: 0.16em;
+        }
+
+        .logo span {
+            color: var(--accent);
+        }
+
+        .tagline {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .user-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .user-actions a {
+            text-decoration: none;
+        }
 
         .btn-ghost {
             font-size: 11px;
@@ -68,32 +95,44 @@
             color: var(--text-muted);
             cursor: pointer;
         }
-        .btn-ghost:hover { color: #e5e7eb; }
+
+        .btn-ghost:hover {
+            border-color: rgba(148,163,184,1);
+            color: #e5e7eb;
+        }
+
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
 
         .panel {
             border-radius: 16px;
             border: 1px solid rgba(51,65,85,0.95);
             background: rgba(15,23,42,0.96);
             padding: 14px 14px 12px;
-            margin-bottom: 16px;
         }
 
         .panel-header {
             display: flex;
             justify-content: space-between;
+            align-items: baseline;
             margin-bottom: 8px;
         }
 
         .panel-title {
             font-size: 13px;
-            text-transform: uppercase;
+            font-weight: 500;
             letter-spacing: 0.09em;
+            text-transform: uppercase;
             color: var(--text-muted);
         }
 
         .pill {
             font-size: 11px;
             text-transform: uppercase;
+            letter-spacing: 0.12em;
             border-radius: 999px;
             padding: 4px 10px;
             border: 1px solid rgba(56,189,248,0.7);
@@ -101,32 +140,17 @@
             background: rgba(15,23,42,0.85);
         }
 
-        .toggle-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 12px;
-        }
-
-        .toggle-btn {
-            flex: 1;
-            text-align: center;
-            padding: 8px 0;
-            border-radius: 999px;
-            cursor: pointer;
-            font-size: 13px;
-            border: 1px solid rgba(148,163,184,0.6);
-            background: rgba(15,23,42,0.9);
-            color: var(--text-muted);
-        }
-        .toggle-btn.active {
-            background: linear-gradient(90deg, #0ea5e9, #22c55e);
-            color: #020617;
-            font-weight: 600;
-        }
-
         .search-row {
             display: flex;
+            flex-direction: column;
             gap: 10px;
+        }
+
+        @media (min-width: 720px) {
+            .search-row {
+                flex-direction: row;
+                align-items: center;
+            }
         }
 
         .search-input-wrap {
@@ -136,11 +160,17 @@
 
         .search-input {
             width: 100%;
-            padding: 10px 12px 10px 32px;
+            padding: 10px 11px 10px 32px;
             border-radius: 999px;
-            background: radial-gradient(circle at top left, rgba(15,23,42,0.95), #020617);
             border: 1px solid rgba(148,163,184,0.7);
+            background: radial-gradient(circle at top left, rgba(15,23,42,0.95), #020617);
             color: var(--text-main);
+            font-size: 14px;
+            outline: none;
+        }
+
+        .search-input::placeholder {
+            color: var(--text-muted);
         }
 
         .search-icon {
@@ -148,24 +178,91 @@
             left: 10px;
             top: 50%;
             transform: translateY(-50%);
+            font-size: 13px;
             color: var(--text-muted);
         }
 
         .btn-primary {
-            padding: 10px 18px;
             border-radius: 999px;
             border: none;
-            background: linear-gradient(90deg, #0ea5e9, #22c55e);
-            color: #020617;
+            padding: 10px 18px;
+            font-size: 12px;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.12em;
             cursor: pointer;
+            background: linear-gradient(90deg, #0ea5e9, #22c55e);
+            color: #020617;
+            white-space: nowrap;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.05);
+        }
+
+        .hint-row {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .hint-row code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            background: rgba(15,23,42,0.8);
+            border-radius: 999px;
+            padding: 2px 8px;
+            border: 1px solid rgba(148,163,184,0.35);
+            color: #e5e7eb;
+        }
+
+        .error {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--danger);
+            background: rgba(127,29,29,0.9);
+            border-radius: 10px;
+            padding: 8px 10px;
+            border: 1px solid rgba(248,113,113,0.85);
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .results-header strong {
+            color: #e5e7eb;
+        }
+
+        .download-form {
+            margin: 0;
+        }
+
+        .btn-secondary {
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.9);
+            background: rgba(15,23,42,0.9);
+            color: var(--text-muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            color: #e5e7eb;
         }
 
         .results-table-wrap {
             border-radius: 12px;
-            margin-top: 12px;
             border: 1px solid rgba(30,64,175,0.9);
+            background: radial-gradient(circle at top left, rgba(30,64,175,0.6), rgba(15,23,42,0.9));
             overflow: hidden;
         }
 
@@ -175,204 +272,333 @@
             font-size: 12px;
         }
 
-        th, td {
-            padding: 6px 8px;
-            border-bottom: 1px solid rgba(30,64,175,0.6);
+        .results-table thead {
+            background: rgba(15,23,42,0.98);
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 7px 8px;
+            border-bottom: 1px solid rgba(30,64,175,0.65);
             text-align: left;
         }
 
-        .metric-pill {
-            padding: 2px 7px;
-            border-radius: 999px;
+        .results-table th {
             font-size: 11px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.11em;
         }
 
-        .error {
-            background: rgba(127,29,29,0.9);
-            border-radius: 10px;
-            padding: 10px;
-            color: var(--danger);
-            margin-top: 8px;
+        .results-table tbody tr:nth-child(even) {
+            background: rgba(15,23,42,0.85);
         }
+
+        .results-table tbody tr:nth-child(odd) {
+            background: rgba(15,23,42,0.93);
+        }
+
+        .results-table tbody tr:hover {
+            background: rgba(15,23,42,1);
+        }
+
+        .metric-pill {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 2px 7px;
+            border: 1px solid rgba(52,211,153,0.7);
+            font-size: 11px;
+            color: #bbf7d0;
+            background: rgba(6,78,59,0.8);
+        }
+
+        .metric-pill.income {
+            border-color: rgba(59,130,246,0.7);
+            color: #bfdbfe;
+            background: rgba(30,64,175,0.85);
+        }
+
+        .metric-pill span {
+            opacity: 0.9;
+        }
+
+        .subtext {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .subtext strong {
+            color: #e5e7eb;
+        }
+
+        /* Mode toggle row */
+
+        .mode-row {
+            display: inline-flex;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .mode-pill {
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.7);
+            padding: 4px 10px;
+            background: rgba(15,23,42,0.9);
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .mode-pill.active {
+            border-color: rgba(56,189,248,0.9);
+            background: rgba(15,23,42,1);
+            color: #e5e7eb;
+        }
+
+        .mode-row input {
+            display: none;
+        }
+
     </style>
 </head>
-
 <body>
 <div class="shell">
-
     <header>
         <div class="brand-block">
             <div class="logo"><span>PELÉE</span> AI</div>
             <div class="tagline">Internal data tool · residential + commercial address discovery</div>
         </div>
-
-        <form action="{{ url_for('logout') }}" method="GET">
-            <button class="btn-ghost">Logout</button>
-        </form>
+        <div class="user-actions">
+            <form action="{{ url_for('logout') }}" method="GET">
+                <button type="submit" class="btn-ghost">Logout</button>
+            </form>
+        </div>
     </header>
 
-    <!-- SEARCH PANEL -->
-    <section class="panel">
-
-        <div class="panel-header">
-            <div class="panel-title">Simple natural-language search</div>
-            <div class="pill">Instant CSV export</div>
-        </div>
-
-        <div class="toggle-row">
-            <div id="btn-res" class="toggle-btn active">Residential</div>
-            <div id="btn-com" class="toggle-btn">Commercial</div>
-        </div>
-
-        <div class="search-row">
-            <div class="search-input-wrap">
-                <span class="search-icon">🔍</span>
-                <input id="query" class="search-input" type="text"
-                       placeholder="residential addresses in Cuyahoga County Ohio" />
+    <main>
+        <!-- SEARCH PANEL -->
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Simple natural-language search</div>
+                <div class="pill">Instant CSV export</div>
             </div>
-            <button id="searchBtn" class="btn-primary">Search</button>
-        </div>
 
-        <div id="examples" class="hint-row" style="margin-top:8px;font-size:11px;color:#9ca3af;">
-            Examples:
-            <code>"residential addresses in Cuyahoga County Ohio"</code> ·
-            <code>"homes in Brevard County Florida"</code>
-        </div>
+            <!-- MODE TOGGLE -->
+            <form method="POST" action="{{ url_for('search') }}">
+                <div class="mode-row">
+                    <label class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
+                        <input type="radio" name="mode" value="residential"
+                               {% if mode != 'commercial' %}checked{% endif %}>
+                        Residential
+                    </label>
+                    <label class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
+                        <input type="radio" name="mode" value="commercial"
+                               {% if mode == 'commercial' %}checked{% endif %}>
+                        Commercial
+                    </label>
+                </div>
 
-        <div id="errorBox" class="error" style="display:none;"></div>
+                <div class="search-row">
+                    <div class="search-input-wrap">
+                        <span class="search-icon">🔍</span>
+                        <input
+                            class="search-input"
+                            type="text"
+                            name="query"
+                            placeholder="{% if mode == 'commercial' %}Example: pharmacies in Palo Alto{% else %}Example: residential addresses in Wakulla County Florida{% endif %}"
+                            value="{{ query or '' }}"
+                            autocomplete="off"
+                        />
+                    </div>
+                    <button type="submit" class="btn-primary">Search</button>
+                </div>
+            </form>
 
-    </section>
+            <div class="hint-row">
+                {% if mode == 'commercial' %}
+                    Examples:
+                    <code>pharmacies in Palo Alto</code>
+                    ·
+                    <code>McDonalds in Cleveland Ohio</code>
+                    ·
+                    <code>coffee shops near Charlotte NC</code>
+                {% else %}
+                    Examples:
+                    <code>residential addresses in Cuyahoga County Ohio</code>
+                    ·
+                    <code>homes in Brevard County Florida</code>
+                {% endif %}
+            </div>
 
-    <!-- RESULTS -->
-    <section class="panel" id="resultsPanel" style="display:none;">
-        <div id="resultMeta" style="font-size:12px;color:#9ca3af;margin-bottom:8px;"></div>
+            {% if error %}
+            <div class="error">
+                {{ error }}
+            </div>
+            {% endif %}
 
-        <div class="results-table-wrap">
-            <table class="results-table" id="resultsTable"></table>
-        </div>
-    </section>
+            {% if commercial_error %}
+            <div class="error">
+                {{ commercial_error }}
+            </div>
+            {% endif %}
+        </section>
 
+        {% if mode == 'residential' %}
+        <!-- RESIDENTIAL RESULTS PANEL -->
+        <section class="panel">
+            <div class="results-header">
+                <div>
+                    {% if location %}
+                        <strong>{{ shown }}</strong> of
+                        <strong>{{ total if total is not none else 0 }}</strong>
+                        matches in <strong>{{ location }}</strong>
+                    {% else %}
+                        No search run yet. Enter a query with county + state to begin.
+                    {% endif %}
+                </div>
+
+                {% if download_available %}
+                <form class="download-form" method="POST" action="{{ url_for('download_csv') }}">
+                    <input type="hidden" name="query" value="{{ query or '' }}" />
+                    <button type="submit" class="btn-secondary">
+                        ⬇️ Download full CSV
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+
+            <div class="results-table-wrap">
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Full Address</th>
+                            <th>#</th>
+                            <th>Street</th>
+                            <th>City</th>
+                            <th>State</th>
+                            <th>ZIP</th>
+                            <th>Income</th>
+                            <th>Home Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if results and results|length > 0 %}
+                            {% for r in results %}
+                            <tr>
+                                <td>{{ r.address or '' }}</td>
+                                <td>{{ r.number or '' }}</td>
+                                <td>{{ r.street or '' }}</td>
+                                <td>{{ r.city or '' }}</td>
+                                <td>{{ r.state or '' }}</td>
+                                <td>{{ r.zip or '' }}</td>
+                                <td>
+                                    {% if r.income is not none %}
+                                        <span class="metric-pill income">
+                                            ${{ "{:,.0f}".format(r.income) }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if r.home_value is not none %}
+                                        <span class="metric-pill">
+                                            ${{ "{:,.0f}".format(r.home_value) }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" style="text-align:center; color: var(--text-muted); padding: 10px 0;">
+                                    {% if location %}
+                                        No preview results to display yet. Try widening your filters.
+                                    {% else %}
+                                        Waiting for a search query.
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subtext">
+                Showing up to <strong>20</strong> preview rows from the cleaned county dataset.
+                Use the CSV export for the full result set.
+            </div>
+        </section>
+        {% else %}
+        <!-- COMMERCIAL RESULTS PANEL -->
+        <section class="panel">
+            <div class="results-header">
+                <div>
+                    {% if commercial_results and commercial_results|length > 0 %}
+                        Showing <strong>{{ commercial_results|length }}</strong> businesses for:
+                        <strong>{{ query }}</strong>
+                    {% else %}
+                        {% if query %}
+                            No commercial matches found yet. Try refining your search.
+                        {% else %}
+                            No search run yet. Enter a business search (e.g. 'pharmacies in Palo Alto').
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="results-table-wrap">
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Address</th>
+                            <th>Phone</th>
+                            <th>Website</th>
+                            <th>Hours</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if commercial_results and commercial_results|length > 0 %}
+                            {% for r in commercial_results %}
+                            <tr>
+                                <td>{{ r.Name or '' }}</td>
+                                <td>{{ r.Address or '' }}</td>
+                                <td>{{ r.Phone or '' }}</td>
+                                <td>
+                                    {% if r.Website and r.Website != 'N/A' %}
+                                        <a href="{{ r.Website }}" target="_blank" style="color:#93c5fd;">
+                                            Website
+                                        </a>
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.Hours or '' }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="5" style="text-align:center; color: var(--text-muted); padding: 10px 0;">
+                                    {% if query %}
+                                        No commercial results to display yet.
+                                    {% else %}
+                                        Waiting for a commercial query.
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subtext">
+                Commercial lookups are powered by Google Places. Results are returned as-is from Google.
+            </div>
+        </section>
+        {% endif %}
+    </main>
 </div>
-
-<script>
-let mode = "residential";
-
-document.getElementById("btn-res").onclick = () => {
-    mode = "residential";
-    document.getElementById("btn-res").classList.add("active");
-    document.getElementById("btn-com").classList.remove("active");
-    document.getElementById("examples").innerHTML =
-        `Examples:
-        <code>"residential addresses in Cuyahoga County Ohio"</code> ·
-        <code>"homes in Brevard County Florida"</code>`;
-};
-
-document.getElementById("btn-com").onclick = () => {
-    mode = "commercial";
-    document.getElementById("btn-com").classList.add("active");
-    document.getElementById("btn-res").classList.remove("active");
-    document.getElementById("examples").innerHTML =
-        `Examples:
-        <code>"pharmacies in Palo Alto"</code> ·
-        <code>"McDonalds in Cleveland Ohio"</code>`;
-};
-
-document.getElementById("searchBtn").onclick = async () => {
-    const q = document.getElementById("query").value.trim();
-    const errorBox = document.getElementById("errorBox");
-    const table = document.getElementById("resultsTable");
-    const panel = document.getElementById("resultsPanel");
-    const meta = document.getElementById("resultMeta");
-
-    errorBox.style.display = "none";
-    table.innerHTML = "";
-    panel.style.display = "none";
-
-    if (!q) {
-        errorBox.innerText = "Please enter a search query.";
-        errorBox.style.display = "block";
-        return;
-    }
-
-    let url = (mode === "residential") ? "/search" : "/commercial_search";
-
-    let payload = (mode === "residential")
-        ? new URLSearchParams({ query: q })
-        : JSON.stringify({ query: q });
-
-    let headers = (mode === "residential")
-        ? { "Content-Type": "application/x-www-form-urlencoded" }
-        : { "Content-Type": "application/json" };
-
-    const res = await fetch(url, { method:"POST", body: payload, headers });
-
-    let data;
-    try { data = await res.json(); }
-    catch {
-        errorBox.innerText = "Invalid JSON response from server.";
-        errorBox.style.display = "block";
-        return;
-    }
-
-    if (!data.ok) {
-        errorBox.innerText = data.error || "Search failed.";
-        errorBox.style.display = "block";
-        return;
-    }
-
-    // Commercial
-    if (mode === "commercial") {
-        meta.innerText = `${data.results.length} businesses found`;
-        table.innerHTML = `
-            <tr><th>Name</th><th>Address</th><th>Phone</th><th>Website</th><th>Hours</th></tr>
-        `;
-        for (let r of data.results) {
-            table.innerHTML += `
-                <tr>
-                    <td>${r.Name || ""}</td>
-                    <td>${r.Address || ""}</td>
-                    <td>${r.Phone || ""}</td>
-                    <td>${r.Website || ""}</td>
-                    <td>${r.Hours || ""}</td>
-                </tr>`;
-        }
-        panel.style.display = "block";
-        return;
-    }
-
-    // Residential
-    meta.innerText = `${data.total} matches in ${data.location}`;
-    table.innerHTML = `
-        <tr>
-            <th>Full Address</th>
-            <th>#</th>
-            <th>Street</th>
-            <th>City</th>
-            <th>State</th>
-            <th>ZIP</th>
-            <th>Income</th>
-            <th>Home Value</th>
-        </tr>
-    `;
-
-    for (let r of data.results) {
-        table.innerHTML += `
-            <tr>
-                <td>${r.address || ""}</td>
-                <td>${r.number || ""}</td>
-                <td>${r.street || ""}</td>
-                <td>${r.city || ""}</td>
-                <td>${r.state || ""}</td>
-                <td>${r.zip || ""}</td>
-                <td>${r.income ? "$" + r.income.toLocaleString() : ""}</td>
-                <td>${r.home_value ? "$" + r.home_value.toLocaleString() : ""}</td>
-            </tr>
-        `;
-    }
-
-    panel.style.display = "block";
-};
-</script>
-
 </body>
 </html>
