@@ -17,7 +17,9 @@
             --danger: #fecaca;
         }
 
-        * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
 
         body {
             margin: 0;
@@ -63,7 +65,9 @@
             letter-spacing: 0.16em;
         }
 
-        .logo span { color: var(--accent); }
+        .logo span {
+            color: var(--accent);
+        }
 
         .tagline {
             font-size: 13px;
@@ -158,9 +162,12 @@
             background: radial-gradient(circle at top left, rgba(15,23,42,0.95), #020617);
             color: var(--text-main);
             font-size: 14px;
+            outline: none;
         }
 
-        .search-input::placeholder { color: var(--text-muted); }
+        .search-input::placeholder {
+            color: var(--text-muted);
+        }
 
         .search-icon {
             position: absolute;
@@ -182,9 +189,12 @@
             cursor: pointer;
             background: linear-gradient(90deg, #0ea5e9, #22c55e);
             color: #020617;
+            white-space: nowrap;
         }
 
-        .btn-primary:hover { filter: brightness(1.05); }
+        .btn-primary:hover {
+            filter: brightness(1.05);
+        }
 
         .hint-row {
             margin-top: 6px;
@@ -221,7 +231,13 @@
             margin-bottom: 8px;
         }
 
-        .results-header strong { color: #e5e7eb; }
+        .results-header strong {
+            color: #e5e7eb;
+        }
+
+        .download-form {
+            margin: 0;
+        }
 
         .btn-secondary {
             border-radius: 999px;
@@ -233,6 +249,10 @@
             letter-spacing: 0.12em;
             padding: 6px 12px;
             cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            color: #e5e7eb;
         }
 
         .results-table-wrap {
@@ -255,12 +275,23 @@
             text-align: left;
         }
 
+        .results-table th {
+            font-size: 11px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.11em;
+        }
+
         .results-table tbody tr:nth-child(even) {
             background: rgba(15,23,42,0.85);
         }
 
         .results-table tbody tr:nth-child(odd) {
             background: rgba(15,23,42,0.93);
+        }
+
+        .results-table tbody tr:hover {
+            background: rgba(15,23,42,1);
         }
 
         .metric-pill {
@@ -279,7 +310,11 @@
             background: rgba(30,64,175,0.85);
         }
 
-        .subtext { margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+        .subtext {
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
 
         .mode-row {
             display: inline-flex;
@@ -297,6 +332,7 @@
             background: rgba(15,23,42,0.9);
             color: var(--text-muted);
             cursor: pointer;
+            text-decoration: none;
         }
 
         .mode-pill.active {
@@ -304,8 +340,6 @@
             background: rgba(15,23,42,1);
             color: #e5e7eb;
         }
-
-        .mode-row input { display:none; }
     </style>
 </head>
 
@@ -333,19 +367,21 @@
                 <div class="pill">Instant CSV export</div>
             </div>
 
+            <!-- mode pills = GET links -->
+            <div class="mode-row">
+                <a href="{{ url_for('index', mode='residential') }}"
+                   class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
+                    Residential
+                </a>
+                <a href="{{ url_for('index', mode='commercial') }}"
+                   class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
+                    Commercial
+                </a>
+            </div>
+
             <form method="POST" action="{{ url_for('search') }}">
-                <div class="mode-row">
-                    <label class="mode-pill {% if mode != 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="residential"
-                               {% if mode != 'commercial' %}checked{% endif %}>
-                        Residential
-                    </label>
-                    <label class="mode-pill {% if mode == 'commercial' %}active{% endif %}">
-                        <input type="radio" name="mode" value="commercial"
-                               {% if mode == 'commercial' %}checked{% endif %}>
-                        Commercial
-                    </label>
-                </div>
+                <!-- always post the current mode -->
+                <input type="hidden" name="mode" value="{{ mode }}"/>
 
                 <div class="search-row">
                     <div class="search-input-wrap">
@@ -493,6 +529,9 @@
                         <tr>
                             <th>Name</th>
                             <th>Address</th>
+                            <th>Phone</th>
+                            <th>Website</th>
+                            <th>Hours</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -502,11 +541,20 @@
                         <tr>
                             <td>{{ r.Name }}</td>
                             <td>{{ r.Address }}</td>
+                            <td>{{ r.Phone }}</td>
+                            <td>
+                                {% if r.Website != "N/A" %}
+                                    <a href="{{ r.Website }}" style="color:#93c5fd;" target="_blank">Website</a>
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>{{ r.Hours }}</td>
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="2" style="text-align:center; color:var(--text-muted); padding:10px;">
+                            <td colspan="5" style="text-align:center; color:var(--text-muted); padding:10px;">
                                 No results.
                             </td>
                         </tr>
@@ -526,3 +574,4 @@
 </div>
 </body>
 </html>
+
