@@ -5,6 +5,7 @@ import time
 import re
 import csv
 import io
+import random
 from datetime import datetime
 
 import boto3
@@ -42,7 +43,6 @@ AWS_REGION = (
 )
 
 S3_BUCKET = os.getenv("S3_BUCKET", "residential-data-jack")
-# CSVs are directly under state folders, e.g. "oh/cuyahoga.csv"
 S3_PREFIX = os.getenv("S3_PREFIX", "").strip()
 
 ACCESS_PASSWORD = os.getenv("ACCESS_PASSWORD", "Charlotte69")
@@ -190,19 +190,18 @@ def build_county_index() -> None:
 
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         for obj in page.get("Contents", []):
-            key = obj["Key"]  # e.g. "oh/cuyahoga.csv"
+            key = obj["Key"]
             if not key.endswith(".csv"):
                 continue
 
             rel = key[len(prefix):] if prefix else key
             parts = rel.split("/")
             if len(parts) != 2:
-                # skip statewide.csv or weird paths
                 continue
 
             state = parts[0].lower().strip()
-            filename = parts[1]  # "cuyahoga.csv"
-            base = filename[:-4]  # drop ".csv"
+            filename = parts[1]
+            base = filename[:-4]
 
             county_norm = normalize_county_name(base)
             if not county_norm:
@@ -271,455 +270,428 @@ def parse_query_location(query: str) -> tuple[str | None, str | None]:
     return state_code, county_norm
 
 
-def parse_numeric_filters(query: str) -> tuple[float | None, float | None]:
+def parse_numeric_filters(query: str) -> tuple[int | None, int | None]:
     """
-    Extract (min_income, min_value) from phrases like:
-    - 'over 200k income'
-    - 'homes over 500k value'
+    Extract min income and min home value from query.
+    e.g. 'income >100k', 'value >500000', etc.
     """
     q = query.lower()
-
-    def parse_amount(match: re.Match) -> float | None:
-        num_str, suffix = match.groups()
-        try:
-            val = float(num_str)
-        except ValueError:
-            return None
-        if suffix == "k":
-            val *= 1_000
-        elif suffix == "m":
-            val *= 1_000_000
-        return val
-
     min_income = None
     min_value = None
 
-    m_over = re.search(r"over\s+(\d+(?:\.\d+)?)(k|m)?", q)
-    if m_over:
-        amount = parse_amount(m_over)
-        if amount is not None:
-            if "income" in q:
-                min_income = amount
-            elif "value" in q or "home" in q:
-                min_value = amount
+    income_match = re.search(r"income\s*[>≥]\s*(\d+)([km]?)", q)
+    if income_match:
+        val_str = income_match.group(1)
+        mult = income_match.group(2)
+        val = int(val_str)
+        if mult == "k":
+            val *= 1000
+        elif mult == "m":
+            val *= 1000000
+        min_income = val
+
+    value_match = re.search(r"value\s*[>≥]\s*(\d+)([km]?)", q)
+    if value_match:
+        val_str = value_match.group(1)
+        mult = value_match.group(2)
+        val = int(val_str)
+        if mult == "k":
+            val *= 1000
+        elif mult == "m":
+            val *= 1000000
+        min_value = val
 
     return min_income, min_value
 
 
 # -------------------------------------------------------------------
-# FEATURE HELPERS (RESIDENTIAL)
-# -------------------------------------------------------------------
-
-def get_income(props: dict) -> float | None:
-    candidate_keys = [
-        "income",
-        "median_income",
-        "acs_income",
-        "HHINC",
-        "MEDHHINC",
-        "DP03_0062E",
-    ]
-    for k in candidate_keys:
-        if k in props:
-            v = props.get(k)
-            if v in (None, "", "-666666666"):
-                continue
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                continue
-    return None
-
-
-def get_home_value(props: dict) -> float | None:
-    candidate_keys = [
-        "home_value",
-        "median_home_value",
-        "acs_value",
-        "med_home_value",
-        "DP04_0089E",
-    ]
-    for k in candidate_keys:
-        if k in props:
-            v = props.get(k)
-            if v in (None, "", "-666666666"):
-                continue
-            try:
-                return float(v)
-            except (ValueError, TypeError):
-                continue
-    return None
-
-
-def extract_basic_fields(props: dict) -> dict:
-    """
-    Extract core address fields from CSV-like rows.
-    """
-
-    def first(*keys):
-        for k in keys:
-            if not k:
-                continue
-            if k in props:
-                v = props.get(k)
-                if v not in (None, ""):
-                    return v
-        return None
-
-    house = first(
-        "house_number",
-        "HOUSE_NUM",
-        "HOUSE",
-        "HOUSENUM",
-        "NUMBER",
-        "number",
-    )
-
-    street = first("street", "STREET", "addr:street", "ROAD", "RD_NAME")
-    city = first("city", "CITY")
-    state = first("state", "STATE", "ST", "STUSPS", "STATE_NAME", "region", "REGION")
-    postal = first("zip", "ZIP", "postal_code", "POSTCODE", "ZIPCODE", "ZIP_CODE")
-
-    address = first("full_address", "address", "ADDR_FULL")
-    if not address:
-        parts = [str(house).strip() if house else None, street]
-        address = " ".join([p for p in parts if p])
-
-    return {
-        "address": address,
-        "number": house,
-        "street": street,
-        "city": city,
-        "state": state,
-        "zip": postal,
-    }
-
-
-RESIDENTIAL_VALUE_HINTS = [
-    "res",
-    "resid",
-    "single fam",
-    "single-family",
-    "sfr",
-    "sfh",
-    "duplex",
-    "triplex",
-    "quadplex",
-    "townhome",
-    "town house",
-    "condo",
-    "apartment",
-    "apt",
-    "mobile home",
-    "mh",
-]
-
-NON_RESIDENTIAL_VALUE_HINTS = [
-    "farm",
-    "agric",
-    "agri",
-    "industrial",
-    "warehouse",
-    "office",
-    "retail",
-    "church",
-    "school",
-    "gov",
-    "government",
-    "hospital",
-    "hotel",
-    "motel",
-    "vacant",
-    "land only",
-]
-
-
-def is_residential(props: dict) -> bool:
-    """
-    Heuristic classification based on textual hints.
-    """
-    for key, value in props.items():
-        if value is None:
-            continue
-        if isinstance(value, (int, float)):
-            continue
-        text = str(value).lower()
-        if len(text) > 200:
-            continue
-        if any(h in text for h in NON_RESIDENTIAL_VALUE_HINTS):
-            if not any(h in text for h in RESIDENTIAL_VALUE_HINTS):
-                return False
-
-    for key, value in props.items():
-        if value is None:
-            continue
-        if isinstance(value, (int, float)):
-            continue
-        text = str(value).lower()
-        if len(text) > 200:
-            continue
-        if any(h in text for h in RESIDENTIAL_VALUE_HINTS):
-            return True
-
-    return True
-
-
-def apply_filters_iter(
-    row_iter,
-    min_income: float | None = None,
-    min_value: float | None = None,
-    filter_residential: bool = True,
-    max_results: int = 20,
-    max_scan: int = 50000,
-) -> tuple[list[dict], int, int]:
-    """
-    Scan CSV rows with early break.
-    row_iter: iterable of dicts (each CSV row).
-    Returns (results, total_matches, scanned_count).
-    """
-    results: list[dict] = []
-    matches = 0
-    scanned = 0
-
-    for props in row_iter:
-        scanned += 1
-
-        if filter_residential and not is_residential(props):
-            if scanned >= max_scan and len(results) >= max_results:
-                break
-            continue
-
-        inc = get_income(props)
-        val = get_home_value(props)
-
-        if min_income is not None:
-            if inc is None or inc < min_income:
-                if scanned >= max_scan and len(results) >= max_results:
-                    break
-                continue
-
-        if min_value is not None:
-            if val is None or val < min_value:
-                if scanned >= max_scan and len(results) >= max_results:
-                    break
-                continue
-
-        matches += 1
-        if len(results) < max_results:
-            basic = extract_basic_fields(props)
-            basic["income"] = inc
-            basic["home_value"] = val
-            results.append(basic)
-
-        if scanned >= max_scan and len(results) >= max_results:
-            break
-
-    return results, matches, scanned
-
-
-# -------------------------------------------------------------------
-# S3 LOADING (CSV)
+# S3 CSV LOADING
 # -------------------------------------------------------------------
 
 def load_county_rows(state_code: str, county_norm: str):
     """
-    Resolve (state, county) to a CSV key and stream rows as dicts.
+    Returns (row_iterator, metadata_dict) or (None, None).
+    Each row is a dict with properties from the CSV.
     """
-    state_code = state_code.lower()
-    county_norm = county_norm.lower()
-
-    state_map = COUNTY_INDEX.get(state_code)
-    if not state_map:
-        logging.warning("[RESOLVE] No state entry in COUNTY_INDEX for state=%s", state_code)
+    if state_code not in COUNTY_INDEX:
+        logging.warning("[LOAD] State %s not found in index.", state_code)
         return None, None
 
-    meta = state_map.get(county_norm)
-
-    if not meta:
-        # Fuzzy fallback: substring match
-        for cand_norm, cand_meta in state_map.items():
-            if county_norm == cand_norm:
-                meta = cand_meta
-                break
-            if county_norm in cand_norm or cand_norm in county_norm:
-                meta = cand_meta
-                break
-
-    if not meta:
+    if county_norm not in COUNTY_INDEX[state_code]:
         logging.warning(
-            "[RESOLVE] No county match in state_map for state=%s county=%s (available=%d)",
-            state_code,
+            "[LOAD] County %s not found in state %s.",
             county_norm,
-            len(state_map),
+            state_code,
         )
         return None, None
 
-    key = meta["key"]
-    size = meta["size"]
+    info = COUNTY_INDEX[state_code][county_norm]
+    s3_key = info["key"]
 
     logging.info(
-        "[RESOLVE] Matched state=%s, county=%s, key=%s, size=%d",
+        "[LOAD] Loading S3 key=%s for state=%s county=%s",
+        s3_key,
         state_code,
         county_norm,
-        key,
-        size,
     )
 
-    obj = s3.get_object(Bucket=S3_BUCKET, Key=key)
-    body = obj["Body"]
-    text_stream = io.TextIOWrapper(body, encoding="utf-8")
-    reader = csv.DictReader(text_stream)
-    return reader, meta
+    try:
+        obj = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+        body = obj["Body"].read()
+        text = body.decode("utf-8", errors="replace")
+    except Exception as e:
+        logging.error("[LOAD] S3 fetch error for key=%s: %s", s3_key, e)
+        return None, None
+
+    lines = text.splitlines()
+    if len(lines) < 2:
+        logging.warning("[LOAD] CSV has <2 lines: %s", s3_key)
+        return None, None
+
+    reader = csv.DictReader(lines)
+
+    def row_gen():
+        for row in reader:
+            yield row
+
+    meta = {
+        "state": state_code,
+        "county": county_norm,
+        "key": s3_key,
+        "size": info["size"],
+    }
+
+    return row_gen(), meta
 
 
 # -------------------------------------------------------------------
 # COMMERCIAL SEARCH (GOOGLE PLACES)
 # -------------------------------------------------------------------
 
-def run_commercial_search(query: str) -> tuple[bool, str | None, list[dict]]:
+def run_commercial_search(query: str) -> tuple[bool, str, list]:
     """
-    Commercial search: uses Google Places Text Search + Details.
-    Does NOT touch S3 or county CSVs.
-    Output schema:
-      {
-        "Name": ...,
-        "Address": ...,
-        "Phone": ...,
-        "Website": ...,
-        "Hours": ...
-      }
+    Returns (ok, error_msg, results_list).
     """
     if not GOOGLE_MAPS_API_KEY:
-        return False, "GOOGLE_MAPS_API_KEY is not configured.", []
+        return False, "Google Maps API key not configured.", []
+
+    url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+    params = {
+        "query": query,
+        "key": GOOGLE_MAPS_API_KEY,
+    }
 
     try:
-        params = {"query": query, "key": GOOGLE_MAPS_API_KEY}
-        resp = httpx.get(
-            "https://maps.googleapis.com/maps/api/place/textsearch/json",
-            params=params,
-            timeout=15.0,
-        )
-        if resp.status_code != 200:
-            return False, f"Places API HTTP {resp.status_code}", []
-
+        resp = httpx.get(url, params=params, timeout=10)
+        resp.raise_for_status()
         data = resp.json()
-        status = data.get("status")
-        if status not in ("OK", "ZERO_RESULTS"):
-            return False, f"Places API status: {status}", []
-
-        base_results = data.get("results", [])
-        if not base_results:
-            return False, "No matching businesses found for that search.", []
-
-        out: list[dict] = []
-
-        for item in base_results[:20]:
-            name = item.get("name", "")
-            address = item.get("formatted_address", "")
-            place_id = item.get("place_id")
-            phone = "N/A"
-            website = "N/A"
-            hours_str = ""
-
-            if place_id:
-                try:
-                    d_resp = httpx.get(
-                        "https://maps.googleapis.com/maps/api/place/details/json",
-                        params={
-                            "place_id": place_id,
-                            "fields": "international_phone_number,website,opening_hours",
-                            "key": GOOGLE_MAPS_API_KEY,
-                        },
-                        timeout=15.0,
-                    )
-                    if d_resp.status_code == 200:
-                        d_data = d_resp.json().get("result", {})
-                        phone = d_data.get("international_phone_number") or "N/A"
-                        website = d_data.get("website") or "N/A"
-                        weekday = d_data.get("opening_hours", {}).get("weekday_text")
-                        if weekday:
-                            hours_str = "; ".join(weekday)
-                except Exception as e:
-                    logging.warning("Places details error: %s", e)
-
-            out.append(
-                {
-                    "Name": name,
-                    "Address": address,
-                    "Phone": phone,
-                    "Website": website,
-                    "Hours": hours_str,
-                }
-            )
-
-        return True, None, out
-
     except Exception as e:
-        logging.exception("Commercial search failed.")
-        return False, f"Commercial search error: {e}", []
+        logging.error("[COMMERCIAL] Google Places API error: %s", e)
+        return False, f"Error calling Google Places: {e}", []
+
+    if data.get("status") != "OK":
+        msg = f"Google Places status: {data.get('status')}"
+        logging.warning("[COMMERCIAL] %s", msg)
+        return False, msg, []
+
+    places = data.get("results", [])
+    results = []
+
+    for place in places[:20]:
+        name = place.get("name", "N/A")
+        address = place.get("formatted_address", "N/A")
+        phone = "N/A"
+        website = "N/A"
+        hours = "N/A"
+
+        place_id = place.get("place_id")
+        if place_id:
+            details_url = "https://maps.googleapis.com/maps/api/place/details/json"
+            details_params = {
+                "place_id": place_id,
+                "fields": "formatted_phone_number,website,opening_hours",
+                "key": GOOGLE_MAPS_API_KEY,
+            }
+            try:
+                details_resp = httpx.get(
+                    details_url, params=details_params, timeout=10
+                )
+                details_resp.raise_for_status()
+                details_data = details_resp.json()
+                result = details_data.get("result", {})
+                phone = result.get("formatted_phone_number", "N/A")
+                website = result.get("website", "N/A")
+                opening_hours = result.get("opening_hours", {})
+                weekday_text = opening_hours.get("weekday_text", [])
+                if weekday_text:
+                    hours = "; ".join(weekday_text[:2])
+            except Exception as e:
+                logging.warning(
+                    "[COMMERCIAL] Failed to fetch details for place_id=%s: %s",
+                    place_id,
+                    e,
+                )
+
+        results.append({
+            "Name": name,
+            "Address": address,
+            "Phone": phone,
+            "Website": website,
+            "Hours": hours,
+        })
+
+    return True, "", results
 
 
 # -------------------------------------------------------------------
-# AUTH HELPERS
+# FILTERING HELPERS
 # -------------------------------------------------------------------
 
-def require_login() -> bool:
-    return bool(session.get("authenticated"))
+def get_income(props: dict) -> int | None:
+    val = props.get("income")
+    if val is None or val == "":
+        return None
+    try:
+        return int(float(val))
+    except:
+        return None
+
+
+def get_home_value(props: dict) -> int | None:
+    val = props.get("home_value")
+    if val is None or val == "":
+        return None
+    try:
+        return int(float(val))
+    except:
+        return None
+
+
+def is_residential(props: dict) -> bool:
+    """
+    Heuristic: if 'use_code' contains 'residential' or similar.
+    """
+    use_code = (props.get("use_code") or "").lower()
+    if "residential" in use_code or "single" in use_code:
+        return True
+    return False
+
+
+def extract_basic_fields(props: dict) -> dict:
+    """
+    Build a friendly dict for display.
+    """
+    number = props.get("house_number") or props.get("number") or ""
+    street = props.get("street_name") or props.get("street") or ""
+    city = props.get("city") or ""
+    state = props.get("state") or ""
+    zip_code = props.get("zip") or ""
+
+    address_parts = []
+    if number:
+        address_parts.append(str(number))
+    if street:
+        address_parts.append(str(street))
+    address_str = " ".join(address_parts) if address_parts else ""
+
+    return {
+        "address": address_str,
+        "number": number,
+        "street": street,
+        "city": city,
+        "state": state,
+        "zip": zip_code,
+    }
+
+
+def apply_filters_iter(
+    row_iter,
+    min_income: int | None,
+    min_value: int | None,
+    filter_residential: bool,
+    max_results: int,
+    max_scan: int,
+):
+    """
+    Filter rows from iterator and return (preview_results, match_count, scanned_count).
+    """
+    preview_results = []
+    matches = 0
+    scanned = 0
+
+    for props in row_iter:
+        scanned += 1
+        if scanned > max_scan:
+            break
+
+        if filter_residential and not is_residential(props):
+            continue
+
+        inc = get_income(props)
+        val = get_home_value(props)
+
+        if min_income is not None and (inc is None or inc < min_income):
+            continue
+        if min_value is not None and (val is None or val < min_value):
+            continue
+
+        matches += 1
+
+        if len(preview_results) < max_results:
+            basic = extract_basic_fields(props)
+            preview_results.append({
+                "address": basic.get("address"),
+                "number": basic.get("number"),
+                "street": basic.get("street"),
+                "city": basic.get("city"),
+                "state": basic.get("state"),
+                "zip": basic.get("zip"),
+                "income": inc,
+                "home_value": val,
+            })
+
+    return preview_results, matches, scanned
 
 
 # -------------------------------------------------------------------
-# ROUTES
+# ROUTES: LOGIN/LOGOUT
 # -------------------------------------------------------------------
 
-@app.route("/health")
-def health():
-    return jsonify(
-        {
-            "ok": True,
-            "time": int(time.time()),
-            "env_aws_id": bool(AWS_ACCESS_KEY_ID),
-            "env_google_maps": bool(GOOGLE_MAPS_API_KEY),
-            "indexed_states": len(COUNTY_INDEX),
-        }
-    )
+def require_login():
+    return session.get("authenticated") is True
 
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        pw = request.form.get("password", "")
-        if pw == ACCESS_PASSWORD:
-            session["authenticated"] = True
-            logging.info("[AUTH] Login success")
-            return redirect(url_for("index"))
-        logging.info("[AUTH] Login failed")
-        return render_template(
-            "login.html",
-            error="Incorrect password. Please try again.",
-        )
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
 
-    return render_template("login.html")
+        if password == ACCESS_PASSWORD:
+            session["authenticated"] = True
+            session["username"] = username or "user"
+            logging.info("[LOGIN] User authenticated: %s", username)
+            return redirect(url_for("index"))
+        else:
+            logging.warning("[LOGIN] Failed login attempt for user=%s", username)
+            return render_template("login.html", error="Invalid credentials.")
+
+    return render_template("login.html", error=None)
 
 
 @app.route("/logout")
 def logout():
     session.clear()
+    logging.info("[LOGOUT] User logged out.")
     return redirect(url_for("login"))
 
 
-@app.route("/", methods=["GET"])
+# -------------------------------------------------------------------
+# QUICK SAMPLE ROUTE (NEW FEATURE)
+# -------------------------------------------------------------------
+
+@app.route("/quick-sample", methods=["POST"])
+def quick_sample():
+    """
+    Allows users to get 15 random addresses from a county WITHOUT logging in.
+    Parse county/state from sample_query, load CSV, and return random sample.
+    """
+    sample_query = (request.form.get("sample_query") or "").strip()
+    
+    if not sample_query:
+        return render_template(
+            "login.html",
+            error="Please enter a county and state for the quick sample."
+        )
+
+    # Parse location
+    state_code, county_norm = parse_query_location(sample_query)
+    
+    if not state_code or not county_norm:
+        return render_template(
+            "login.html",
+            error=f"Could not identify county/state from '{sample_query}'. Try: 'Cuyahoga County Ohio'"
+        )
+
+    # Load county data
+    row_iter, meta = load_county_rows(state_code, county_norm)
+    
+    if row_iter is None or meta is None:
+        friendly_county = f"{county_norm.title()} County, {state_code.upper()}"
+        return render_template(
+            "login.html",
+            error=f"No data found for {friendly_county}. Please verify the county name and state."
+        )
+
+    # Collect all rows (limited to prevent memory issues)
+    all_rows = []
+    for i, props in enumerate(row_iter):
+        if i >= 10000:  # Limit collection to first 10k rows
+            break
+        all_rows.append(props)
+
+    if len(all_rows) == 0:
+        return render_template(
+            "login.html",
+            error="County dataset is empty."
+        )
+
+    # Random sample of 15 (or fewer if dataset is small)
+    sample_size = min(15, len(all_rows))
+    sampled_rows = random.sample(all_rows, sample_size)
+
+    # Format results
+    results = []
+    for props in sampled_rows:
+        basic = extract_basic_fields(props)
+        inc = get_income(props)
+        val = get_home_value(props)
+        
+        results.append({
+            "address": basic.get("address"),
+            "number": basic.get("number"),
+            "street": basic.get("street"),
+            "city": basic.get("city"),
+            "state": basic.get("state"),
+            "zip": basic.get("zip"),
+            "income": inc,
+            "home_value": val,
+        })
+
+    location_label = f"{county_norm.title()} County, {state_code.upper()}"
+
+    logging.info(
+        "[QUICK_SAMPLE] Returned %d random samples from %s",
+        len(results),
+        location_label
+    )
+
+    # Render a special sample results page (we'll use index.html with special flag)
+    return render_template(
+        "sample_results.html",
+        location=location_label,
+        results=results,
+        total=len(all_rows),
+        shown=len(results),
+        query=sample_query,
+    )
+
+
+# -------------------------------------------------------------------
+# ROUTES: MAIN APP
+# -------------------------------------------------------------------
+
+@app.route("/")
 def index():
     if not require_login():
         return redirect(url_for("login"))
 
     mode = request.args.get("mode", "residential")
-    if mode not in ("residential", "commercial"):
-        mode = "residential"
 
     return render_template(
         "index.html",
         mode=mode,
-        query="",
+        query=None,
         location=None,
         results=[],
         total=None,
@@ -736,42 +708,13 @@ def search():
     if not require_login():
         return redirect(url_for("login"))
 
-    mode = request.form.get("mode", "residential")
-    if mode not in ("residential", "commercial"):
-        mode = "residential"
-
     query = (request.form.get("query") or "").strip()
-    logging.info("[SEARCH] mode=%s query='%s'", mode, query)
+    mode = (request.form.get("mode") or "residential").strip()
 
     if not query:
-        if mode == "commercial":
-            return render_template(
-                "index.html",
-                mode=mode,
-                query=query,
-                location=None,
-                results=[],
-                total=None,
-                shown=0,
-                error=None,
-                download_available=False,
-                commercial_results=[],
-                commercial_error="Please enter a search query.",
-            )
-        else:
-            return render_template(
-                "index.html",
-                mode=mode,
-                query=query,
-                location=None,
-                results=[],
-                total=None,
-                shown=0,
-                error="Please enter a search query with a county and state.",
-                download_available=False,
-                commercial_results=[],
-                commercial_error=None,
-            )
+        return redirect(url_for("index", mode=mode))
+
+    logging.info("[SEARCH] mode=%s query='%s'", mode, query)
 
     # ---------------------------------------------
     # COMMERCIAL SEARCH BRANCH (NO S3)
@@ -822,8 +765,8 @@ def search():
             total=None,
             shown=0,
             error=(
-                "Couldn't resolve a (county, state). Use: "
-                "'residential addresses in Cuyahoga County Ohio'."
+                "Could not identify a county and state. "
+                "Try format: 'addresses in Cuyahoga County Ohio'"
             ),
             download_available=False,
             commercial_results=[],
@@ -841,7 +784,7 @@ def search():
             results=[],
             total=None,
             shown=0,
-            error=f"County dataset not found: {friendly_county}.",
+            error=f"No dataset found for {friendly_county}.",
             download_available=False,
             commercial_results=[],
             commercial_error=None,
@@ -885,8 +828,8 @@ def search():
 
     if total == 0:
         error_msg = (
-            "No matching addresses found for that filter. "
-            "Try removing any income/value filters or double-checking the county + state."
+            "No addresses matched your search criteria. "
+            "Try removing filters or verifying the county and state."
         )
     else:
         error_msg = None
@@ -931,8 +874,8 @@ def download_csv():
             total=None,
             shown=0,
             error=(
-                "Couldn't resolve a (county, state) from that query for CSV export. "
-                "Include BOTH the exact county name, the word 'County', and the full state name."
+                "Could not identify county/state from query for CSV export. "
+                "Include both county name and state."
             ),
             download_available=False,
             commercial_results=[],
@@ -950,7 +893,7 @@ def download_csv():
             results=[],
             total=None,
             shown=0,
-            error=f"Couldn't find a dataset for {friendly_county} for CSV export.",
+            error=f"Could not find dataset for {friendly_county} for CSV export.",
             download_available=False,
             commercial_results=[],
             commercial_error=None,
@@ -1039,4 +982,3 @@ def download_csv():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-
