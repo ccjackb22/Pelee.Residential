@@ -223,79 +223,6 @@
             font-size: 11px;
             color: var(--muted);
         }
-
-        .divider {
-            margin: 20px 0 16px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            color: var(--muted);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-        }
-
-        .divider::before,
-        .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: rgba(148,163,184,0.3);
-        }
-
-        .sample-section {
-            margin-top: 16px;
-        }
-
-        .sample-label {
-            font-size: 12px;
-            color: var(--muted);
-            margin-bottom: 8px;
-        }
-
-        .sample-input-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-
-        .sample-input-row input {
-            flex: 1;
-            margin-bottom: 0;
-            background: #020617 !important;
-            border: 1px solid rgba(148,163,184,0.9) !important;
-            color: var(--text) !important;
-        }
-
-        .sample-input-row input:focus {
-            border-color: var(--accent) !important;
-            outline: none;
-        }
-
-        .btn-secondary {
-            padding: 10px 16px;
-            border-radius: 999px;
-            border: 1px solid rgba(148,163,184,0.7);
-            background: rgba(15,23,42,0.9);
-            color: var(--text);
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        .btn-secondary:hover {
-            border-color: var(--accent);
-            background: rgba(15,23,42,1);
-        }
-
-        .sample-hint {
-            font-size: 10px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
     </style>
 </head>
 
@@ -339,11 +266,11 @@
 
             <div class="footnote" style="margin-top:20px;">
                 Questions or enterprise access? Contact us at
-                <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0d7e6c61687e4d7d68616868236c64">[email&#160;protected]</a></strong>
+                <strong>sales@pelee.ai</strong>
             </div>
         </div>
 
-        <!-- RIGHT SIDE (LOGIN + QUICK SAMPLE) -->
+        <!-- RIGHT SIDE (LOGIN) -->
         <div>
             <div class="login-card">
                 <div class="login-title">Login Required</div>
@@ -362,26 +289,10 @@
                     {% endif %}
                 </form>
 
-                <div class="divider">Or try a quick sample</div>
+            </div>
+        </div>
 
-                <div class="sample-section">
-                    <div class="sample-label">Preview data without logging in</div>
-                    
-                    <form method="POST" action="{{ url_for('quick_sample') }}">
-                        <label for="sample_query" style="font-size: 12px; margin-bottom: 6px; display: block; color: var(--text);">
-                            County & State
-                        </label>
-                        <div class="sample-input-row">
-                            <input 
-                                id="sample_query"
-                                type="text" 
-                                name="sample_query" 
-                                placeholder="Enter: Cuyahoga County Ohio"
-                                autocomplete="off"
-                            >
-                            <button type="submit" class="btn-secondary">Get Sample</button>
-                        </div>
-                        <div class="sample-hint">
-                            Returns 15 random addresses with complete data
-                        </div>
-   
+    </div>
+</div>
+</body>
+</html>
