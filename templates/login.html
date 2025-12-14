@@ -86,7 +86,7 @@
             display: grid;
             grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
             gap: 32px;
-            align-items: center;
+            align-items: start;
         }
 
         @media (max-width: 800px) {
@@ -103,6 +103,7 @@
             margin-top: 8px;
             font-size: 14px;
             color: var(--muted);
+            line-height: 1.5;
         }
 
         .stat-row {
@@ -222,6 +223,79 @@
             font-size: 11px;
             color: var(--muted);
         }
+
+        .divider {
+            margin: 20px 0 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(148,163,184,0.3);
+        }
+
+        .sample-section {
+            margin-top: 16px;
+        }
+
+        .sample-label {
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .sample-input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .sample-input-row input {
+            flex: 1;
+            margin-bottom: 0;
+            background: #020617 !important;
+            border: 1px solid rgba(148,163,184,0.9) !important;
+            color: var(--text) !important;
+        }
+
+        .sample-input-row input:focus {
+            border-color: var(--accent) !important;
+            outline: none;
+        }
+
+        .btn-secondary {
+            padding: 10px 16px;
+            border-radius: 999px;
+            border: 1px solid rgba(148,163,184,0.7);
+            background: rgba(15,23,42,0.9);
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--accent);
+            background: rgba(15,23,42,1);
+        }
+
+        .sample-hint {
+            font-size: 10px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
     </style>
 </head>
 
@@ -233,64 +307,81 @@
             <img src="{{ url_for('static', filename='3.png') }}" class="logo-img" alt="PELÉE logo">
             <div class="logo"><span>PELÉE</span> AI</div>
         </div>
-        <div class="pill-small">Restricted access</div>
+        <div class="pill-small">Authenticated Access</div>
     </div>
 
     <div class="main-grid">
 
         <!-- LEFT SIDE -->
         <div>
-            <div class="hero-title">U.S. location data — organized, indexed, and searchable.</div>
+            <div class="hero-title">Nationwide location data — unified, searchable, and ready to export.</div>
 
             <div class="hero-sub">
-                A private console for deep exploration of structured datasets across every region,
-                powered by natural-language search and instant export tools.
+                A streamlined platform for exploring residential and commercial property datasets 
+                across the U.S. Search by natural language, filter by criteria, and export to CSV instantly.
             </div>
 
             <div class="stat-row">
-                <div class="stat-pill"><strong>3,143</strong> counties indexed nationwide</div>
-                <div class="stat-pill"><strong>Unified datasets</strong> across multiple sources</div>
-                <div class="stat-pill"><strong>Instant CSV</strong> export & filtering tools</div>
+                <div class="stat-pill"><strong>3,143</strong> counties nationwide</div>
+                <div class="stat-pill"><strong>Residential & Commercial</strong> data</div>
+                <div class="stat-pill"><strong>Instant CSV</strong> downloads</div>
             </div>
 
             <div class="examples">
-                <div class="examples-label">Example query patterns</div>
+                <div class="examples-label">Example Searches</div>
 
                 <div class="example-chip-row">
-                    <div class="example-chip">"addresses near Palo Alto"</div>
                     <div class="example-chip">"homes in Santa Clara County"</div>
-                    <div class="example-chip">"Mountain View commercial properties"</div>
+                    <div class="example-chip">"pharmacies in Palo Alto"</div>
+                    <div class="example-chip">"addresses in Wakulla County FL"</div>
                 </div>
             </div>
 
             <div class="footnote" style="margin-top:20px;">
-                Contact us for enterprise access:
-                <strong>sales@pelee.ai</strong>
+                Questions or enterprise access? Contact us at
+                <strong><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0d7e6c61687e4d7d68616868236c64">[email&#160;protected]</a></strong>
             </div>
         </div>
 
-        <!-- RIGHT SIDE (LOGIN) -->
-        <div class="login-card">
-            <div class="login-title">Login Required</div>
+        <!-- RIGHT SIDE (LOGIN + QUICK SAMPLE) -->
+        <div>
+            <div class="login-card">
+                <div class="login-title">Login Required</div>
 
-            <form method="POST">
-                <label for="username">Username</label>
-                <input id="username" name="username" type="text" placeholder="Enter username">
+                <form method="POST">
+                    <label for="username">Username</label>
+                    <input id="username" name="username" type="text" placeholder="Enter username" autocomplete="username">
 
-                <label for="password">Password</label>
-                <input id="password" name="password" type="password" placeholder="Enter password">
+                    <label for="password">Password</label>
+                    <input id="password" name="password" type="password" placeholder="Enter password" autocomplete="current-password">
 
-                <button class="btn" type="submit">Enter</button>
+                    <button class="btn" type="submit">Sign In</button>
 
-                {% if error %}
-                <div class="error">{{ error }}</div>
-                {% endif %}
-            </form>
+                    {% if error %}
+                    <div class="error">{{ error }}</div>
+                    {% endif %}
+                </form>
 
-        </div>
+                <div class="divider">Or try a quick sample</div>
 
-    </div>
-</div>
-</body>
-</html>
-
+                <div class="sample-section">
+                    <div class="sample-label">Preview data without logging in</div>
+                    
+                    <form method="POST" action="{{ url_for('quick_sample') }}">
+                        <label for="sample_query" style="font-size: 12px; margin-bottom: 6px; display: block; color: var(--text);">
+                            County & State
+                        </label>
+                        <div class="sample-input-row">
+                            <input 
+                                id="sample_query"
+                                type="text" 
+                                name="sample_query" 
+                                placeholder="Enter: Cuyahoga County Ohio"
+                                autocomplete="off"
+                            >
+                            <button type="submit" class="btn-secondary">Get Sample</button>
+                        </div>
+                        <div class="sample-hint">
+                            Returns 15 random addresses with complete data
+                        </div>
+   
